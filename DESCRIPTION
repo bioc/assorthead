@@ -1,0 +1,13 @@
+Package: assorthead
+Version: 0.99.0
+Date: 2024-06-15
+Title: Assorted Header-only C++ Libraries
+Description:
+    Vendors an assortment of useful header-only C++ libraries.
+    Bioconductor packages can use these libraries in their own C++ code by LinkingTo this package without introducing any additional dependencies.
+    The use of a central repository avoids duplicate vendoring of libraries across multiple R packages,
+    and enables better coordination of version updates across cohorts of interdependent C++ libraries.
+Suggests:
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
