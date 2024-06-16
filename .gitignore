@@ -1,2 +1,3 @@
 *.swp
 inst/sources
+inst/.versions

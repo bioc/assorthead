@@ -5,6 +5,7 @@ set -u
 
 mkdir -p sources
 mkdir -p licenses
+mkdir -p .versions
 
 simple_harvester() {
     local name=$1
@@ -12,6 +13,17 @@ simple_harvester() {
     local version=$3
 
     local tmpname=sources/${name}
+    local vfile=.versions/${name}
+    if [ -e ${vfile} ]
+    then
+        existing_version=$(cat $vfile)
+        if [ $existing_version == $version ]
+        then
+            echo "${name} (${version}) is already present"
+            return 0
+        fi
+    fi
+
     if [ ! -e $tmpname ]
     then 
         git clone $url $tmpname
@@ -26,6 +38,8 @@ simple_harvester() {
     rm -rf licenses/$name
     mkdir licenses/$name
     cp -r ${tmpname}/LICENSE licenses/${name}
+
+    echo $version > $vfile
 }
 
 simple_harvester tatami https://github.com/tatami-inc/tatami v3.0.0
