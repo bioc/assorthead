@@ -7,31 +7,56 @@ mkdir -p sources
 mkdir -p licenses
 mkdir -p .versions
 
-simple_harvester() {
-    local name=$1
-    local url=$2
-    local version=$3
+get_version_file() {
+    echo .versions/$1
+}
 
-    local tmpname=sources/${name}
-    local vfile=.versions/${name}
+already_exists() {
+    local vfile=$(get_version_file $1)
     if [ -e ${vfile} ]
     then
         existing_version=$(cat $vfile)
         if [ $existing_version == $version ]
         then
-            echo "${name} (${version}) is already present"
+            echo 1
             return 0
         fi
     fi
 
+    echo 0
+}
+
+git_clone() {
+    local name=$1
+    local url=$2
+    local version=$3
+
+    local tmpname=sources/${name}
     if [ ! -e $tmpname ]
     then 
-        git clone $url $tmpname
+        git clone $url $tmpname 1>&2
     else 
-        git -C ${tmpname} fetch --all
+        git -C ${tmpname} fetch --all 1>&2
     fi
 
-    git -C $tmpname checkout $version
+    git -C $tmpname checkout $version 1>&2
+    echo $tmpname
+}
+
+####################################################
+
+simple_harvester() {
+    local name=$1
+    local url=$2
+    local version=$3
+
+    if [ $(already_exists $name) -eq 1 ]
+    then
+        echo "${name} (${version}) is already present"
+        return 0
+    fi
+
+    local tmpname=$(git_clone $name $url $version)
     rm -rf include/$name
     cp -r ${tmpname}/include/$name include/$name
 
@@ -39,6 +64,7 @@ simple_harvester() {
     mkdir licenses/$name
     cp -r ${tmpname}/LICENSE licenses/${name}
 
+    local vfile=$(get_version_file $name)
     echo $version > $vfile
 }
 
@@ -57,3 +83,59 @@ simple_harvester kmeans https://github.com/LTLA/CppKmeans v3.0.1
 simple_harvester knncolle https://github.com/knncolle/knncolle v2.0.0
 simple_harvester knncolle_annoy https://github.com/knncolle/knncolle_annoy v0.1.0
 simple_harvester knncolle_hnsw https://github.com/knncolle/knncolle_hnsw v0.1.0
+
+####################################################
+
+annoy_harvester() {
+    local name=annoy
+    local version=v1.17.2
+    local url=https://github.com/spotify/annoy
+
+    if [ $(already_exists $name) -eq 1 ]
+    then
+        echo "${name} (${version}) is already present"
+        return 0
+    fi
+
+    local tmpname=$(git_clone $name $url $version)
+    rm -rf include/$name
+    mkdir include/$name
+    cp $tmpname/src/*.h include/$name/
+
+    rm -rf licenses/$name
+    mkdir licenses/$name
+    cp -r ${tmpname}/LICENSE licenses/${name}
+
+    local vfile=$(get_version_file $name)
+    echo $version > $vfile
+}
+
+annoy_harvester
+
+####################################################
+
+hnsw_harvester() {
+    local name=hnswlib
+    local version=v0.8.0
+    local url=https://github.com/nmslib/hnswlib
+
+    if [ $(already_exists $name) -eq 1 ]
+    then
+        echo "${name} (${version}) is already present"
+        return 0
+    fi
+
+    local tmpname=$(git_clone $name $url $version)
+    rm -rf include/$name
+    mkdir include/$name
+    cp $tmpname/hnswlib/* include/$name/
+
+    rm -rf licenses/$name
+    mkdir licenses/$name
+    cp -r ${tmpname}/LICENSE licenses/${name}
+
+    local vfile=$(get_version_file $name)
+    echo $version > $vfile
+}
+
+hnsw_harvester
