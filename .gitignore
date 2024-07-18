@@ -1,3 +1,4 @@
 *.swp
+vignettes/*.html
 inst/sources
 inst/.versions

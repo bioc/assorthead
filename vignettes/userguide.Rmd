@@ -1,0 +1,71 @@
+---
+title: Assortment of header-only libraries
+author: 
+- name: Aaron Lun
+  email: infinite.monkeys.with.keyboards@gmail.com
+date: "`r Sys.Date()`"
+output:
+  BiocStyle::html_document:
+    toc: true
+package: assorthead
+vignette: >
+  %\VignetteIndexEntry{User's Guide}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+```{r style, echo=FALSE}
+library(BiocStyle)
+knitr::opts_chunk$set(error=FALSE, warning=FALSE, message=FALSE)
+self <- Biocpkg("assortedhead")
+```
+
+# Overview
+
+`r self` vendors an assortment of header-only C++ libraries for use in Bioconductor packages. 
+The use of a central repository avoids duplicate vendoring of libraries across multiple R packages,
+and enables better coordination of version updates across cohorts of interdependent C++ libraries.
+This package is minimalistic by design to ensure that downstream packages are not burdened with more transitive dependencies.
+
+# Quick start
+
+To use `r self` in a Bioconductor package,
+just add it to the `LinkingTo` field in the `DESCRIPTION`:
+
+```
+LinkingTo: assorthead
+```
+
+The package C++ code can `#include` any of the available libraries, for example:
+
+```cpp
+#include "Eigen/Dense"
+#include "annoy/annoylib.h"
+#include "annoy/kissrandom.h"
+#include "tatami/tatami.hpp"
+```
+
+# Available libraries
+
+|Name|Version|Description|
+|----|-------|-----------|
+|[**tatami**](https://github.com/tatami-inc/tatami)|v3.0.0|C++ API for matrix representations|
+|[**tatami_r**](https://github.com/tatami-inc/tatami_r)|v2.0.0|**tatami** extension for R matrices|
+|[**tatami_stats**](https://github.com/tatami-inc/tatami_stats)|v1.0.0|Compute statistics from **tatami** matrices|
+|[**tatami_chunked**](https://github.com/tatami-inc/tatami_chunked)|v2.0.0|**tatami** extension for chunked matrices|
+|[**manticore**](https://github.com/tatami-inc/manticore)|v1.0.2|Execute arbitrary functions on the main thread|
+|[**byteme**](https://github.com/LTLA/byteme)|v1.2.2|C++ interfaces for reading/writing byte buffers|
+|[**aarand**](https://github.com/LTLA/aarand)|v1.0.2|Lightweight random distribution functions|
+|[**powerit**](https://github.com/LTLA/powerit)|v2.0.0|Power iterations|
+|[**WeightedLowess**](https://github.com/LTLA/CppWeightedLowess)|v2.0.0|Lowess trend fitting with weights, à la `limma::weightedLowess`|
+|[**kmeans**](https://github.com/LTLA/CppKmeans)|v3.0.1|C++ port of `kmeans` with various initialization methods|
+|[**knncolle**](https://github.com/knncolle/knncolle)|v2.0.0|C++ API for nearest-neighbor searches|
+|[**knncolle_annoy**](https://github.com/knncolle/knncolle_annoy)|v0.1.0|**knncolle** extension for Annoy|
+|[**knncolle_hnsw**](https://github.com/knncolle/knncolle_hnsw)|v0.1.0|**knncolle** extension for HNSW|
+|[**annoy**](https://github.com/spotify/annoy)|v1.17.2|Approximate nearest neighbors oh yeah|
+|[**hsnwlib**](https://github.com/nmslib/hnswlib)|v0.8.0|Hierarchical navigable small worlds for finding nearest neighbors|
+|[**Eigen**](https://gitlab.com/libeigen/eigen)|3.4.0|C++ template library for linear algebra|
+
+# Contributing
+
+If you want to add new libraries or update existing versions,
+make a [pull request](https://github.com/LTLA/assorthead/pulls) with appropriate motifications in the `inst/fetch.sh` file.
