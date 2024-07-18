@@ -1,13 +1,19 @@
 Package: assorthead
 Version: 0.99.0
-Date: 2024-06-15
+Date: 2024-07-18
 Title: Assorted Header-only C++ Libraries
+Authors@R: person("Aaron", "Lun", role=c("cre", "aut"), email="infinite.monkeys.with.keyboards@gmail.com")
 Description:
     Vendors an assortment of useful header-only C++ libraries.
     Bioconductor packages can use these libraries in their own C++ code by LinkingTo this package without introducing any additional dependencies.
     The use of a central repository avoids duplicate vendoring of libraries across multiple R packages,
     and enables better coordination of version updates across cohorts of interdependent C++ libraries.
+License: MIT + file LICENSE
 Suggests:
     knitr,
-    rmarkdown
+    rmarkdown,
+    BiocStyle
 VignetteBuilder: knitr
+URL: https://github.com/LTLA/assorthead
+BugReports: https://github.com/LTLA/assorthead/issues
+Encoding: UTF-8
