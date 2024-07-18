@@ -84,6 +84,17 @@ simple_harvester knncolle https://github.com/knncolle/knncolle v2.0.0
 simple_harvester knncolle_annoy https://github.com/knncolle/knncolle_annoy v0.1.0
 simple_harvester knncolle_hnsw https://github.com/knncolle/knncolle_hnsw v0.1.0
 
+simple_harvester kaori https://github.com/crisprverse/kaori v1.1.2
+
+simple_harvester scran_qc https://github.com/libscran/scran_qc v0.1.0
+simple_harvester scran_norm https://github.com/libscran/scran_norm v0.1.0
+simple_harvester scran_variances https://github.com/libscran/scran_variances v0.1.0
+simple_harvester scran_pca https://github.com/libscran/scran_pca v0.1.0
+simple_harvester scran_graph_cluster https://github.com/libscran/scran_graph_cluster v0.1.0
+simple_harvester scran_markers https://github.com/libscran/scran_markers v0.1.0
+simple_harvester scran_aggregate https://github.com/libscran/scran_aggregate v0.1.0
+simple_harvester scran_blocks https://github.com/libscran/scran_blocks v0.1.0
+
 ####################################################
 
 annoy_harvester() {
