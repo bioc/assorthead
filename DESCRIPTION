@@ -17,3 +17,11 @@ VignetteBuilder: knitr
 URL: https://github.com/LTLA/assorthead
 BugReports: https://github.com/LTLA/assorthead/issues
 Encoding: UTF-8
+biocViews:
+    SingleCell, 
+    QualityControl,
+    Normalization,
+    DataRepresentation,
+    DataImport,
+    DifferentialExpression,
+    Alignment
