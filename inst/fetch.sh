@@ -139,3 +139,31 @@ hnsw_harvester() {
 }
 
 hnsw_harvester
+
+####################################################
+
+eigen_harvester() {
+    local name=Eigen
+    local version=3.4.0
+    local url=https://gitlab.com/libeigen/eigen
+
+    if [ $(already_exists $name) -eq 1 ]
+    then
+        echo "${name} (${version}) is already present"
+        return 0
+    fi
+
+    local tmpname=$(git_clone $name $url $version)
+    rm -rf include/$name
+    mkdir include/$name
+    cp -r $tmpname/Eigen/* include/$name/
+
+    rm -rf licenses/$name
+    mkdir licenses/$name
+    cp -r ${tmpname}/COPYING.* licenses/${name}
+
+    local vfile=$(get_version_file $name)
+    echo $version > $vfile
+}
+
+eigen_harvester
