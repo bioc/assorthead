@@ -59,13 +59,21 @@ void add_welford_zeros(Output_& mean, Output_& sumsq, Index_ num_nonzero, Index_
     mean *= ratio;
 }
 
+// Avoid problems from interactions between constexpr/lambda/std::conditional. 
+template<typename Index_>
+struct MockVector {
+    MockVector(size_t) {}
+    Index_& operator[](size_t) { return out; }
+    Index_ out = 0;
+};
+
 }
 /**
  * @endcond
  */
 
 /**
- * Compute the mean and variance from a sparse array of values.
+ * Compute the mean and variance from a sparse objective vector.
  * This uses the standard two-pass algorithm with naive accumulation of the sum of squared differences;
  * thus, it is best used with a sufficiently high-precision `Output_` like `double`.
  *
@@ -73,9 +81,9 @@ void add_welford_zeros(Output_& mean, Output_& sumsq, Index_ num_nonzero, Index_
  * @tparam Value_ Type of the input data.
  * @tparam Index_ Type of the row/column indices.
  *
- * @param[in] value Pointer to an array of values of length `num`.
+ * @param[in] value Pointer to an array of length `num`, containing the values of the structural non-zeros.
  * @param num_nonzero Length of the array pointed to by `value`.
- * @param num_all Total number of values in the dataset, including the zeros not in `value`.
+ * @param num_all Length of the objective vector, including the structural zeros not in `value`.
  * This should be greater than or equal to `num_nonzero`.
  * @param skip_nan See `Options::skip_nan`.
  *
@@ -87,40 +95,48 @@ std::pair<Output_, Output_> direct(const Value_* value, Index_ num_nonzero, Inde
     Output_ mean = 0;
     Index_ lost = 0;
 
-    if (skip_nan) {
-        auto copy = value;
-        for (Index_ i = 0; i < num_nonzero; ++i, ++copy) {
-            auto val = *copy;
-            if (std::isnan(val)) {
-                ++lost;
-            } else {
-                mean += val;
+    ::tatami_stats::internal::nanable_ifelse<Value_>(
+        skip_nan,
+        [&]() {
+            auto copy = value;
+            for (Index_ i = 0; i < num_nonzero; ++i, ++copy) {
+                auto val = *copy;
+                if (std::isnan(val)) {
+                    ++lost;
+                } else {
+                    mean += val;
+                }
+            }
+        },
+        [&]() {
+            auto copy = value;
+            for (Index_ i = 0; i < num_nonzero; ++i, ++copy) {
+                mean += *copy;
             }
         }
-    } else {
-        auto copy = value;
-        for (Index_ i = 0; i < num_nonzero; ++i, ++copy) {
-            mean += *copy;
-        }
-    }
+    );
 
     auto count = num_all - lost;
     mean /= count;
 
     Output_ var = 0;
-    if (skip_nan) {
-        for (Index_ i = 0; i < num_nonzero; ++i, ++value) {
-            auto val = *value;
-            if (!std::isnan(val)) {
+    ::tatami_stats::internal::nanable_ifelse<Value_>(
+        skip_nan,
+        [&]() {
+            for (Index_ i = 0; i < num_nonzero; ++i, ++value) {
+                auto val = *value;
+                if (!std::isnan(val)) {
+                    var += (val - mean) * (val - mean);
+                }
+            }
+        },
+        [&]() {
+            for (Index_ i = 0; i < num_nonzero; ++i, ++value) {
+                auto val = *value;
                 var += (val - mean) * (val - mean);
             }
         }
-    } else {
-        for (Index_ i = 0; i < num_nonzero; ++i, ++value) {
-            auto val = *value;
-            var += (val - mean) * (val - mean);
-        }
-    }
+    );
 
     if (num_nonzero < num_all) {
         var += (num_all - num_nonzero) * mean * mean;
@@ -136,7 +152,7 @@ std::pair<Output_, Output_> direct(const Value_* value, Index_ num_nonzero, Inde
 }
 
 /**
- * Compute the mean and variance from an array of values.
+ * Compute the mean and variance from a dense objective vector.
  * This uses the standard two-pass algorithm with naive accumulation of the sum of squared differences;
  * thus, it is best used with a sufficiently high-precision `Output_` like `double`.
  *
@@ -144,8 +160,8 @@ std::pair<Output_, Output_> direct(const Value_* value, Index_ num_nonzero, Inde
  * @tparam Value_ Type of the input data.
  * @tparam Index_ Type of the row/column indices.
  *
- * @param[in] ptr Pointer to an array of values of length `num`.
- * @param num Size of the array.
+ * @param[in] ptr Pointer to an array of length `num`, containing the values of the objective vector.
+ * @param num Length of the objective vector, i.e., length of the array at `ptr`.
  * @param skip_nan See `Options::skip_nan`.
  *
  * @return The sample mean and variance of values in `[ptr, ptr + num)`.
@@ -160,10 +176,10 @@ std::pair<Output_, Output_> direct(const Value_* ptr, Index_ num, bool skip_nan)
  * @brief Running variances from dense data.
  *
  * Compute running means and variances from dense data using Welford's method.
- * This considers a scenario with a set of equilength "objective" vectors [V1, V2, V3, ..., Vn],
- * but data are only available for "observed" vectors [P1, P2, P3, ..., Pm],
- * where Pi[j] contains the i-th element of objective vector Vj.
- * The idea is to repeatedly call `add()` for `ptr` corresponding to observed vectors from 0 to m - 1,
+ * This considers a scenario with a set of equilength "objective" vectors \f$[v_1, v_2, v_3, ..., v_n]\f$,
+ * but data are only available for "observed" vectors \f$[p_1, p_2, p_3, ..., p_m]\f$,
+ * where the \f$j\f$-th element of \f$p_i\f$ is the \f$i\f$-th element of \f$v_j\f$.
+ * The idea is to repeatedly call `add()` for `ptr` corresponding to observed vectors from 0 to \f$m - 1\f$,
  * and then finally call `finish()` to obtain the mean and variance for each objective vector.
  *
  * @tparam Output_ Type of the output data.
@@ -174,7 +190,7 @@ template<typename Output_, typename Value_, typename Index_>
 class RunningDense {
 public:
     /**
-     * @param num Number of objective vectors, i.e., n.
+     * @param num Number of objective vectors, i.e., \f$n\f$.
      * @param[out] mean Pointer to an output array of length `num`.
      * This should be zeroed on input; after `finish()` is called, this will contain the means for each objective vector.
      * @param[out] variance Pointer to an output array of length `num`, containing the variances for each objective vector.
@@ -189,49 +205,57 @@ public:
      * @param[in] ptr Pointer to an array of values of length `num`, corresponding to an observed vector.
      */
     void add(const Value_* ptr) {
-        if (my_skip_nan) {
-            for (Index_ i = 0; i < my_num; ++i, ++ptr) {
-                auto val = *ptr;
-                if (!std::isnan(val)) {
-                    internal::add_welford(my_mean[i], my_variance[i], val, ++(my_ok_count[i]));
+        ::tatami_stats::internal::nanable_ifelse<Value_>(
+            my_skip_nan,
+            [&]() {
+                for (Index_ i = 0; i < my_num; ++i, ++ptr) {
+                    auto val = *ptr;
+                    if (!std::isnan(val)) {
+                        internal::add_welford(my_mean[i], my_variance[i], val, ++(my_ok_count[i]));
+                    }
+                }
+            },
+            [&]() {
+                ++my_count;
+                for (Index_ i = 0; i < my_num; ++i, ++ptr) {
+                    internal::add_welford(my_mean[i], my_variance[i], *ptr, my_count);
                 }
             }
-        } else {
-            ++my_count;
-            for (Index_ i = 0; i < my_num; ++i, ++ptr) {
-                internal::add_welford(my_mean[i], my_variance[i], *ptr, my_count);
-            }
-        }
+        );
     }
 
     /**
      * Finish the variance calculation once all observed vectors have been passed to `add()`. 
      */
     void finish() {
-        if (my_skip_nan) {
-            for (Index_ i = 0; i < my_num; ++i) {
-                auto ct = my_ok_count[i];
-                if (ct < 2) {
-                    my_variance[i] = std::numeric_limits<Output_>::quiet_NaN();
-                    if (ct == 0) {
-                        my_mean[i] = std::numeric_limits<Output_>::quiet_NaN();
+        ::tatami_stats::internal::nanable_ifelse<Value_>(
+            my_skip_nan,
+            [&]() {
+                for (Index_ i = 0; i < my_num; ++i) {
+                    auto ct = my_ok_count[i];
+                    if (ct < 2) {
+                        my_variance[i] = std::numeric_limits<Output_>::quiet_NaN();
+                        if (ct == 0) {
+                            my_mean[i] = std::numeric_limits<Output_>::quiet_NaN();
+                        }
+                    } else {
+                        my_variance[i] /= ct - 1;
+                    }
+                }
+            },
+            [&]() {
+                if (my_count < 2) {
+                    std::fill_n(my_variance, my_num, std::numeric_limits<Output_>::quiet_NaN());
+                    if (my_count == 0) {
+                        std::fill_n(my_mean, my_num, std::numeric_limits<Output_>::quiet_NaN());
                     }
                 } else {
-                    my_variance[i] /= ct - 1;
+                    for (Index_ i = 0; i < my_num; ++i) {
+                        my_variance[i] /= my_count - 1;
+                    }
                 }
             }
-        } else {
-            if (my_count < 2) {
-                std::fill_n(my_variance, my_num, std::numeric_limits<Output_>::quiet_NaN());
-                if (my_count == 0) {
-                    std::fill_n(my_mean, my_num, std::numeric_limits<Output_>::quiet_NaN());
-                }
-            } else {
-                for (Index_ i = 0; i < my_num; ++i) {
-                    my_variance[i] /= my_count - 1;
-                }
-            }
-        }
+        );
     }
 
 private:
@@ -240,14 +264,14 @@ private:
     Output_* my_variance;
     bool my_skip_nan;
     Index_ my_count = 0;
-    std::vector<Index_> my_ok_count;
+    typename std::conditional<std::numeric_limits<Value_>::has_quiet_NaN, std::vector<Index_>, internal::MockVector<Index_> >::type my_ok_count;
 };
 
 /**
  * @brief Running variances from sparse data.
  *
  * Compute running means and variances from sparse data using Welford's method.
- * This does the same as its dense overload for sparse observed vectors.
+ * This does the same as `RunningDense` but for sparse observed vectors.
  *
  * @tparam Output_ Type of the output data.
  * @tparam Value_ Type of the input data.
@@ -278,60 +302,67 @@ public:
      */
     void add(const Value_* value, const Index_* index, Index_ number) {
         ++my_count;
-        if (my_skip_nan) {
-            for (Index_ i = 0; i < number; ++i) {
-                auto val = value[i];
-                auto ri = index[i] - my_subtract;
-                if (std::isnan(val)) {
-                    ++my_nan[ri];
-                } else {
-                    internal::add_welford(my_mean[ri], my_variance[ri], val, ++(my_nonzero[ri]));
+
+        ::tatami_stats::internal::nanable_ifelse<Value_>(
+            my_skip_nan,
+            [&]() {
+                for (Index_ i = 0; i < number; ++i) {
+                    auto val = value[i];
+                    auto ri = index[i] - my_subtract;
+                    if (std::isnan(val)) {
+                        ++my_nan[ri];
+                    } else {
+                        internal::add_welford(my_mean[ri], my_variance[ri], val, ++(my_nonzero[ri]));
+                    }
+                }
+            },
+            [&]() {
+                for (Index_ i = 0; i < number; ++i) {
+                    auto ri = index[i] - my_subtract;
+                    internal::add_welford(my_mean[ri], my_variance[ri], value[i], ++(my_nonzero[ri]));
                 }
             }
-
-        } else {
-            for (Index_ i = 0; i < number; ++i) {
-                auto ri = index[i] - my_subtract;
-                internal::add_welford(my_mean[ri], my_variance[ri], value[i], ++(my_nonzero[ri]));
-            }
-        }
+        );
     }
 
     /**
      * Finish the variance calculation once all observed vectors have been passed to `add()`. 
      */
     void finish() {
-        if (my_skip_nan) {
-            for (Index_ i = 0; i < my_num; ++i) {
-                auto& curM = my_mean[i];
-                auto& curV = my_variance[i];
-                auto ct = my_count - my_nan[i];
+        ::tatami_stats::internal::nanable_ifelse<Value_>(
+            my_skip_nan,
+            [&]() {
+                for (Index_ i = 0; i < my_num; ++i) {
+                    auto& curM = my_mean[i];
+                    auto& curV = my_variance[i];
+                    Index_ ct = my_count - my_nan[i];
 
-                if (ct < 2) {
-                    curV = std::numeric_limits<Output_>::quiet_NaN();
-                    if (ct == 0) {
-                        curM = std::numeric_limits<Output_>::quiet_NaN();
+                    if (ct < 2) {
+                        curV = std::numeric_limits<Output_>::quiet_NaN();
+                        if (ct == 0) {
+                            curM = std::numeric_limits<Output_>::quiet_NaN();
+                        }
+                    } else {
+                        internal::add_welford_zeros(curM, curV, my_nonzero[i], ct);
+                        curV /= ct - 1;
+                    }
+                }
+            },
+            [&]() {
+                if (my_count < 2) {
+                    std::fill_n(my_variance, my_num, std::numeric_limits<Output_>::quiet_NaN());
+                    if (my_count == 0) {
+                        std::fill_n(my_mean, my_num, std::numeric_limits<Output_>::quiet_NaN());
                     }
                 } else {
-                    internal::add_welford_zeros(curM, curV, my_nonzero[i], ct);
-                    curV /= ct - 1;
+                    for (Index_ i = 0; i < my_num; ++i) {
+                        auto& var = my_variance[i];
+                        internal::add_welford_zeros(my_mean[i], var, my_nonzero[i], my_count);
+                        var /= my_count - 1;
+                    }
                 }
             }
-
-        } else {
-            if (my_count < 2) {
-                std::fill_n(my_variance, my_num, std::numeric_limits<Output_>::quiet_NaN());
-                if (my_count == 0) {
-                    std::fill_n(my_mean, my_num, std::numeric_limits<Output_>::quiet_NaN());
-                }
-            } else {
-                for (Index_ i = 0; i < my_num; ++i) {
-                    auto& var = my_variance[i];
-                    internal::add_welford_zeros(my_mean[i], var, my_nonzero[i], my_count);
-                    var /= my_count - 1;
-                }
-            }
-        }
+        );
     }
 
 private:
@@ -342,7 +373,7 @@ private:
     bool my_skip_nan;
     Index_ my_subtract;
     Index_ my_count = 0;
-    std::vector<Index_> my_nan;
+    typename std::conditional<std::numeric_limits<Value_>::has_quiet_NaN, std::vector<Index_>, internal::MockVector<Index_> >::type my_nan;
 };
 
 /**
@@ -354,7 +385,8 @@ private:
  * @tparam Index_ Type of the row/column indices.
  * @tparam Output_ Type of the output value.
  *
- * @param row Whether to compute variances for the rows.
+ * @param row Whether to compute the variance for each row.
+ * If false, the variance is computed for each column instead.
  * @param p Pointer to a `tatami::Matrix`.
  * @param[out] output Pointer to an array of length equal to the number of rows (if `row = true`) or columns (otherwise).
  * On output, this will contain the row/column variances.
@@ -381,7 +413,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
 
         } else {
             tatami::parallelize([&](size_t thread, Index_ s, Index_ l) {
-                auto ext = tatami::consecutive_extractor<true>(p, !row, 0, otherdim, s, l);
+                auto ext = tatami::consecutive_extractor<true>(p, !row, static_cast<Index_>(0), otherdim, s, l);
                 std::vector<Value_> vbuffer(l);
                 std::vector<Index_> ibuffer(l);
 
@@ -412,7 +444,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
 
         } else {
             tatami::parallelize([&](size_t thread, Index_ s, Index_ l) {
-                auto ext = tatami::consecutive_extractor<false>(p, !row, 0, otherdim, s, l);
+                auto ext = tatami::consecutive_extractor<false>(p, !row, static_cast<Index_>(0), otherdim, s, l);
                 std::vector<Value_> buffer(l);
 
                 std::vector<Output_> running_means(l);

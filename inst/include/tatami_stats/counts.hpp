@@ -23,14 +23,15 @@ namespace tatami_stats {
 namespace counts {
 
 /**
- * Count the number of values in each dimension element that satisfy the `condition`.
+ * Count the number of values that satisfy the `condition` in each element of a chosen dimension.
  *
  * @tparam Value_ Type of the matrix value, should be numeric.
  * @tparam Index_ Type of the row/column indices.
  * @tparam Output_ Type of the output value.
  * This should be at least large enough to hold the dimensions of `p`.
  *
- * @param row Whether to count in each row.
+ * @param row Whether to perform the count within each row.
+ * If false, the count is performed within each column instead.
  * @param p Pointer to a `tatami::Matrix`.
  * @param[out] output Pointer to an array of length equal to the number of rows (if `row = true`) or columns (otherwise).
  * On output, this will contain the row/column variances.

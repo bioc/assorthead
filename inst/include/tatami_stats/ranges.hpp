@@ -77,15 +77,15 @@ bool is_better(Output_ best, Value_ alt) {
  */
 
 /**
- * Directly compute the minimum or maximum of a dense array.
+ * Directly compute the minimum or maximum of a dense objective vector.
  *
  * @tparam minimum_ Whether to compute the minimum.
  * If false, the maximum is computed instead.
  * @tparam Value_ Type of the input data.
  * @tparam Index_ Type of the row/column indices.
  *
- * @param[in] ptr Pointer to an array of values of length `num`.
- * @param num Size of the array.
+ * @param[in] ptr Pointer to an array of length `num`, containing the values of the objective vector.
+ * @param num Length of the objective vector, i.e., length of the array at `ptr`.
  * @param skip_nan See `Options::skip_nan` for details.
  *
  * @return The minimum or maximum value, depending on `minimum_`.
@@ -94,39 +94,43 @@ bool is_better(Output_ best, Value_ alt) {
  */
 template<bool minimum_, typename Value_, typename Index_>
 Value_ direct(const Value_* ptr, Index_ num, bool skip_nan) {
-    if (skip_nan) {
-        auto current = internal::choose_placeholder<minimum_, Value_>(); 
-        for (Index_ i = 0; i < num; ++i) {
-            auto val = ptr[i];
-            if (internal::is_better<minimum_>(current, val)) { // no need to explicitly handle NaNs, as any comparison with NaNs is always false.
-                current = val;
+    return ::tatami_stats::internal::nanable_ifelse_with_value<Value_>(
+        skip_nan,
+        [&]() -> Value_ {
+            auto current = internal::choose_placeholder<minimum_, Value_>(); 
+            for (Index_ i = 0; i < num; ++i) {
+                auto val = ptr[i];
+                if (internal::is_better<minimum_>(current, val)) { // no need to explicitly handle NaNs, as any comparison with NaNs is always false.
+                    current = val;
+                }
+            }
+            return current;
+        },
+        [&]() -> Value_ {
+            if (num) {
+                if constexpr(minimum_) {
+                    return *std::min_element(ptr, ptr + num);
+                } else {
+                    return *std::max_element(ptr, ptr + num);
+                }
+            } else {
+                return internal::choose_placeholder<minimum_, Value_>(); 
             }
         }
-        return current;
-
-    } else if (num) {
-        if constexpr(minimum_) {
-            return *std::min_element(ptr, ptr + num);
-        } else {
-            return *std::max_element(ptr, ptr + num);
-        }
-
-    } else {
-        return internal::choose_placeholder<minimum_, Value_>(); 
-    }
+    );
 }
 
 /**
- * Compute the extremes of a sparse array.
+ * Compute the extremes of a sparse objective vector.
  *
  * @tparam minimum_ Whether to compute the minimum.
  * If false, the maximum is computed instead.
  * @tparam Value_ Type of the input data.
  * @tparam Index_ Type of the row/column indices.
  *
- * @param[in] value Pointer to an array of values of length `num`.
- * @param num_nonzero Length of the array pointed to by `value`.
- * @param num_all Total number of values in the dataset, including the zeros not in `value`.
+ * @param[in] value Pointer to an array of length `num_nonzero`, containing the values of the structural non-zeros.
+ * @param num_nonzero Number of structural non-zeros in the objective vector.
+ * @param num_all Length of the objective vector, including the structural zeros not in `value`.
  * This should be greater than or equal to `num_nonzero`.
  * @param skip_nan See `Options::skip_nan` for details.
  *
@@ -152,13 +156,14 @@ Value_ direct(const Value_* value, Index_ num_nonzero, Index_ num_all, bool skip
 /**
  * @brief Running minima/maxima from dense data.
  *
- * This considers a scenario with a set of equilength "objective" vectors [V1, V2, V3, ..., Vn],
- * but data are only available for "observed" vectors [P1, P2, P3, ..., Pm],
- * where Pi[j] contains the i-th element of objective vector Vj.
- * The idea is to repeatedly call `add()` for `ptr` corresponding to observed vectors from 0 to m - 1,
+ * This considers a scenario with a set of equilength "objective" vectors \f$[v_1, v_2, v_3, ..., v_n]\f$,
+ * but data are only available for "observed" vectors \f$[p_1, p_2, p_3, ..., p_m]\f$,
+ * where the \f$j\f$-th element of \f$p_i\f$ is the \f$i\f$-th element of \f$v_j\f$.
+ * The idea is to repeatedly call `add()` for `ptr` corresponding to observed vectors from 0 to \f$m - 1\f$,
  * which computes the running minimum/maximum for each objective vector at each invocation.
  *
  * @tparam minimum_ Whether to compute the minimum.
+ * If false, the maximum is computed instead.
  * @tparam Output_ Type of the output data.
  * @tparam Value_ Type of the input data.
  * @tparam Index_ Type of the row/column indices.
@@ -167,7 +172,7 @@ template<bool minimum_, typename Output_, typename Value_, typename Index_>
 class RunningDense {
 public:
     /**
-     * @param num Number of objective vectors, i.e., n.
+     * @param num Number of objective vectors, i.e., \f$n\f$.
      * @param[out] store Pointer to an output array of length `num`.
      * After `finish()` is called, this will contain the minimum/maximum for each objective vector.
      * @param skip_nan See `Options::skip_nan` for details.
@@ -181,18 +186,22 @@ public:
     void add(const Value_* ptr) {
         if (my_init) {
             my_init = false;
-            if (my_skip_nan) {
-                for (Index_ i = 0; i < my_num; ++i, ++ptr) {
-                    auto val = *ptr;
-                    if (std::isnan(val)) {
-                        my_store[i] = internal::choose_placeholder<minimum_, Value_>();
-                    } else {
-                        my_store[i] = val;
+            ::tatami_stats::internal::nanable_ifelse<Value_>(
+                my_skip_nan,
+                [&]() {
+                    for (Index_ i = 0; i < my_num; ++i, ++ptr) {
+                        auto val = *ptr;
+                        if (std::isnan(val)) {
+                            my_store[i] = internal::choose_placeholder<minimum_, Value_>();
+                        } else {
+                            my_store[i] = val;
+                        }
                     }
+                },
+                [&]() {
+                    std::copy_n(ptr, my_num, my_store);
                 }
-            } else {
-                std::copy_n(ptr, my_num, my_store);
-            }
+            );
 
         } else {
             for (Index_ i = 0; i < my_num; ++i, ++ptr) {
@@ -227,6 +236,7 @@ private:
  * This does the same as `RunningDense` but for sparse observed vectors.
  *
  * @tparam minimum_ Whether to compute the minimum.
+ * If false, the maximum is computed instead.
  * @tparam Output_ Type of the output data.
  * @tparam Value_ Type of the input value.
  * @tparam Index_ Type of the row/column indices.
@@ -316,7 +326,8 @@ private:
  * @tparam Index_ Type of the row/column indices.
  * @tparam Output_ Type of the output value.
  *
- * @param row Whether to compute variances for the rows.
+ * @param row Whether to compute the range for each row.
+ * If false, the range is computed for each column instead.
  * @param p Pointer to a `tatami::Matrix`.
  * @param[out] min_out Pointer to an array of length equal to the number of rows (if `row = true`) or columns (otherwise).
  * On output, this will contain the minimum of each row/column.
@@ -357,7 +368,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* min_out, 
 
         } else {
             tatami::parallelize([&](size_t thread, Index_ s, Index_ l) {
-                auto ext = tatami::consecutive_extractor<true>(p, !row, 0, otherdim, s, l, opt);
+                auto ext = tatami::consecutive_extractor<true>(p, !row, static_cast<Index_>(0), otherdim, s, l, opt);
                 std::vector<Value_> vbuffer(l);
                 std::vector<Index_> ibuffer(l);
 
@@ -405,7 +416,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* min_out, 
 
         } else {
             tatami::parallelize([&](size_t thread, Index_ s, Index_ l) {
-                auto ext = tatami::consecutive_extractor<false>(p, !row, 0, otherdim, s, l);
+                auto ext = tatami::consecutive_extractor<false>(p, !row, static_cast<Index_>(0), otherdim, s, l);
                 std::vector<Value_> buffer(l);
 
                 auto local_min = (store_min ? LocalOutputBuffer<Output_>(thread, s, l, min_out) : LocalOutputBuffer<Output_>());

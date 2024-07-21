@@ -47,12 +47,13 @@ struct Options {
  * @tparam Output_ Type of the output value.
  * This should be floating-point to store potential averages.
  *
- * @param row Whether to compute medians for the rows.
+ * @param row Whether to compute group-wise medians within each row.
+ * If false, medians are computed in each column instead.
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of columns (if `row = true`) or rows (otherwise).
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
- * @param group_sizes Vector-like object of length `N`, specifying the number of columns assigned to each group.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
+ * @param group_sizes Vector-like object of length \f$N\f$, specifying the number of columns assigned to each group.
  * This can be created by calling `tatami_stats::tabulate_groups()` on `group`.
  * @param[out] output Pointer to an array of pointers of length equal to the number of groups.
  * Each inner pointer should reference an array of length equal to the number of rows (if `row = true`) or columns (otherwise).
@@ -121,7 +122,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, const Group_* grou
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of columns.
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
  * @param mopt Median calculation options.
  *
  * @return Vector of length equal to the number of groups.
@@ -155,7 +156,7 @@ std::vector<std::vector<Output_> > by_row(const tatami::Matrix<Value_, Index_>* 
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of columns.
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
  *
  * @return Vector of length equal to the number of groups.
  * Each entry is a vector of length equal to the number of rows, containing the row-wise medians for the corresponding group.
@@ -176,7 +177,7 @@ std::vector<std::vector<Output_> > by_row(const tatami::Matrix<Value_, Index_>* 
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of rows.
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
  * @param mopt Median calculation options.
  *
  * @return Vector of length equal to the number of groups.
@@ -210,7 +211,7 @@ std::vector<std::vector<Output_> > by_column(const tatami::Matrix<Value_, Index_
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of rows.
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
  *
  * @return Vector of length equal to the number of groups.
  * Each entry is a vector of length equal to the number of columns, containing the column-wise medians for the corresponding group.

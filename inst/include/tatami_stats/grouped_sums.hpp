@@ -46,12 +46,13 @@ struct Options {
  * @tparam Output_ Type of the output value.
  * This should be floating-point to store potential averages.
  *
- * @param row Whether to compute sums for the rows.
+ * @param row Whether to compute group-wise sums within each row.
+ * If false, sums are computed within the column instead.
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of columns (if `row = true`) or rows (otherwise).
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
- * @param num_groups Number of groups, i.e., `N`.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
+ * @param num_groups Number of groups, i.e., \f$N\f$.
  * This can be determined by calling `tatami_stats::total_groups()` on `group`.
  * @param[out] output Pointer to an array of pointers of length equal to the number of groups.
  * Each inner pointer should reference an array of length equal to the number of rows (if `row = true`) or columns (otherwise).
@@ -75,18 +76,22 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, const Group_* grou
                     auto range = ext->fetch(xbuffer.data(), ibuffer.data());
                     std::fill(tmp.begin(), tmp.end(), static_cast<Output_>(0));
 
-                    if (sopt.skip_nan) {
-                        for (int j = 0; j < range.number; ++j) {
-                            auto val = range.value[j];
-                            if (!std::isnan(val)) {
-                                tmp[group[range.index[j]]] += val;
+                    internal::nanable_ifelse<Value_>(
+                        sopt.skip_nan,
+                        [&]() {
+                            for (int j = 0; j < range.number; ++j) {
+                                auto val = range.value[j];
+                                if (!std::isnan(val)) {
+                                    tmp[group[range.index[j]]] += val;
+                                }
+                            }
+                        },
+                        [&]() {
+                            for (int j = 0; j < range.number; ++j) {
+                                tmp[group[range.index[j]]] += range.value[j];
                             }
                         }
-                    } else {
-                        for (int j = 0; j < range.number; ++j) {
-                            tmp[group[range.index[j]]] += range.value[j];
-                        }
-                    }
+                    );
 
                     for (size_t g = 0; g < num_groups; ++g) {
                         output[g][i + start] = tmp[g];
@@ -112,7 +117,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, const Group_* grou
                     runners.emplace_back(local_output.back().data(), sopt.skip_nan, start);
                 }
 
-                auto ext = tatami::consecutive_extractor<true>(p, !row, 0, otherdim, start, len, opt);
+                auto ext = tatami::consecutive_extractor<true>(p, !row, static_cast<Index_>(0), otherdim, start, len, opt);
                 std::vector<Value_> xbuffer(len);
                 std::vector<Index_> ibuffer(len);
 
@@ -138,18 +143,22 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, const Group_* grou
                     auto ptr = ext->fetch(xbuffer.data());
                     std::fill(tmp.begin(), tmp.end(), static_cast<Output_>(0));
 
-                    if (sopt.skip_nan) {
-                        for (Index_ j = 0; j < otherdim; ++j) {
-                            auto val = ptr[j];
-                            if (!std::isnan(val)) {
-                                tmp[group[j]] += val;
+                    internal::nanable_ifelse<Value_>(
+                        sopt.skip_nan,
+                        [&]() {
+                            for (Index_ j = 0; j < otherdim; ++j) {
+                                auto val = ptr[j];
+                                if (!std::isnan(val)) {
+                                    tmp[group[j]] += val;
+                                }
+                            }
+                        },
+                        [&]() {
+                            for (Index_ j = 0; j < otherdim; ++j) {
+                                tmp[group[j]] += ptr[j];
                             }
                         }
-                    } else {
-                        for (Index_ j = 0; j < otherdim; ++j) {
-                            tmp[group[j]] += ptr[j];
-                        }
-                    }
+                    );
 
                     for (size_t g = 0; g < num_groups; ++g) {
                         output[g][i + start] = tmp[g];
@@ -169,8 +178,8 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, const Group_* grou
                     runners.emplace_back(len, local_output.back().data(), sopt.skip_nan);
                 }
 
-                std::vector<double> xbuffer(len);
-                auto ext = tatami::consecutive_extractor<false>(p, !row, 0, otherdim, start, len);
+                std::vector<Value_> xbuffer(len);
+                auto ext = tatami::consecutive_extractor<false>(p, !row, static_cast<Index_>(0), otherdim, start, len);
 
                 for (int i = 0; i < otherdim; ++i) {
                     auto ptr = ext->fetch(xbuffer.data());
@@ -196,7 +205,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, const Group_* grou
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of columns.
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
  * @param sopt Summation options.
  *
  * @return Vector of length equal to the number of groups.
@@ -230,7 +239,7 @@ std::vector<std::vector<Output_> > by_row(const tatami::Matrix<Value_, Index_>* 
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of columns.
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
  *
  * @return Vector of length equal to the number of groups.
  * Each entry is a vector of length equal to the number of rows, containing the row-wise sums for the corresponding group.
@@ -251,7 +260,7 @@ std::vector<std::vector<Output_> > by_row(const tatami::Matrix<Value_, Index_>* 
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of rows.
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
  * @param sopt Summation options.
  *
  * @return Vector of length equal to the number of groups.
@@ -285,7 +294,7 @@ std::vector<std::vector<Output_> > by_column(const tatami::Matrix<Value_, Index_
  * @param p Pointer to a `tatami::Matrix`.
  * @param[in] group Pointer to an array of length equal to the number of rows.
  * Each value should be an integer that specifies the group assignment.
- * Values should lie in `[0, N)` where `N` is the number of unique groups.
+ * Values should lie in \f$[0, N)\f$ where \f$N\f$ is the number of unique groups.
  *
  * @return Vector of length equal to the number of groups.
  * Each entry is a vector of length equal to the number of columns, containing the column-wise sums for the corresponding group.

@@ -39,41 +39,46 @@ struct Options {
 };
 
 /**
- * Directly sum an array of values using naive accumulation.
+ * Compute the sum across an objective vector using naive accumulation.
  * This is best used with a sufficiently high-precision `Output_`, hence the default of `double`.
  *
  * @tparam Output_ Type of the output data.
  * @tparam Value_ Type of the input data.
  * @tparam Index_ Type of the row/column index.
  *
- * @param[in] ptr Pointer to an array of values of length `num`.
- * @param num Size of the array.
+ * @param[in] ptr Pointer to an array of length `num`, containing the values of the objective vector.
+ * @param num Size of the array at `ptr`.
+ * This may be less than the length of the objective vector for sparse data.
  * @param skip_nan See `Options::skip_nan`.
  * @return The sum.
  */
 template<typename Output_ = double, typename Value_, typename Index_>
 Output_ direct(const Value_* ptr, Index_ num, bool skip_nan) {
-    if (skip_nan) {
-        Output_ sum = 0;
-        for (Index_ i = 0; i < num; ++i) {
-            auto val = ptr[i];
-            if (!std::isnan(val)) {
-                sum += val;
+    return internal::nanable_ifelse_with_value<Value_>(
+        skip_nan,
+        [&]() -> Output_ {
+            Output_ sum = 0;
+            for (Index_ i = 0; i < num; ++i) {
+                auto val = ptr[i];
+                if (!std::isnan(val)) {
+                    sum += val;
+                }
             }
+            return sum;
+        },
+        [&]() -> Output_ {
+            return std::accumulate(ptr, ptr + num, static_cast<Output_>(0));
         }
-        return sum;
-    } else {
-        return std::accumulate(ptr, ptr + num, static_cast<Output_>(0));
-    }
+    );
 }
 
 /**
  * @brief Running sums from dense data.
  *
- * This considers a scenario with a set of equilength "objective" vectors [V1, V2, V3, ..., Vn],
- * but data are only available for "observed" vectors [P1, P2, P3, ..., Pm],
- * where Pi[j] contains the i-th element of objective vector Vj.
- * The idea is to repeatedly call `add()` for `ptr` corresponding to observed vectors from 0 to m - 1,
+ * This considers a scenario with a set of equilength "objective" vectors \f$[v_1, v_2, v_3, ..., v_n]\f$,
+ * but data are only available for "observed" vectors \f$[p_1, p_2, p_3, ..., p_m]\f$,
+ * where the \f$j\f$-th element of \f$p_i\f$ is the \f$i\f$-th element of \f$v_j\f$.
+ * The idea is to repeatedly call `add()` for `ptr` corresponding to observed vectors from 0 to \f$m - 1\f$,
  * and then finally call `finish()` to obtain the sum for each objective vector.
  *
  * This class uses naive accumulation to obtain the sum for each objective vector.
@@ -87,7 +92,7 @@ template<typename Output_, typename Value_, typename Index_>
 class RunningDense {
 public:
     /**
-     * @param num Number of objective vectors, i.e., n.
+     * @param num Number of objective vectors, i.e., \f$n\f$.
      * @param[out] sum Pointer to an output array of length `num`.
      * This should be zeroed on input, and will store the running sums after each `add()`.
      * @param skip_nan See `Options::skip_nan` for details.
@@ -99,18 +104,22 @@ public:
      * @param[in] ptr Pointer to an array of values of length `my_num`, corresponding to an observed vector.
      */
     void add(const Value_* ptr) {
-        if (my_skip_nan) {
-            for (Index_ i = 0; i < my_num; ++i) {
-                auto val = ptr[i];
-                if (!std::isnan(val)) {
-                    my_sum[i] += val;
+        internal::nanable_ifelse<Value_>(
+            my_skip_nan,
+            [&]() {
+                for (Index_ i = 0; i < my_num; ++i) {
+                    auto val = ptr[i];
+                    if (!std::isnan(val)) {
+                        my_sum[i] += val;
+                    }
+                }
+            },
+            [&]() {
+                for (Index_ i = 0; i < my_num; ++i) {
+                    my_sum[i] += ptr[i];
                 }
             }
-        } else {
-            for (Index_ i = 0; i < my_num; ++i) {
-                my_sum[i] += ptr[i];
-            }
-        }
+        );
     }
 
 private:
@@ -151,18 +160,22 @@ public:
      * @param number Number of non-zero elements in `value` and `index`.
      */
     void add(const Value_* value, const Index_* index, Index_ number) {
-        if (my_skip_nan) {
-            for (Index_ i = 0; i < number; ++i) {
-                auto val = value[i];
-                if (!std::isnan(val)) {
-                    my_sum[index[i] - my_subtract] += val;
+        internal::nanable_ifelse<Value_>(
+            my_skip_nan,
+            [&]() {
+                for (Index_ i = 0; i < number; ++i) {
+                    auto val = value[i];
+                    if (!std::isnan(val)) {
+                        my_sum[index[i] - my_subtract] += val;
+                    }
+                }
+            },
+            [&]() {
+                for (Index_ i = 0; i < number; ++i) {
+                    my_sum[index[i] - my_subtract] += value[i];
                 }
             }
-        } else {
-            for (Index_ i = 0; i < number; ++i) {
-                my_sum[index[i] - my_subtract] += value[i];
-            }
-        }
+        );
     }
 
 private:
@@ -182,7 +195,8 @@ private:
  * @tparam Index_ Type of the row/column indices.
  * @tparam Output_ Type of the output value.
  *
- * @param row Whether to compute variances for the rows.
+ * @param row Whether to compute the sum for each row.
+ * If false, the sum is computed for each column instead.
  * @param p Pointer to a `tatami::Matrix`.
  * @param[out] output Pointer to an array of length equal to the number of rows (if `row = true`) or columns (otherwise).
  * On output, this will contain the row/column variances.
@@ -213,7 +227,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
             opt.sparse_ordered_index = false;
 
             tatami::parallelize([&](size_t thread, Index_ s, Index_ l) {
-                auto ext = tatami::consecutive_extractor<true>(p, !row, 0, otherdim, s, l, opt);
+                auto ext = tatami::consecutive_extractor<true>(p, !row, static_cast<Index_>(0), otherdim, s, l, opt);
                 std::vector<Value_> vbuffer(l);
                 std::vector<Index_> ibuffer(l);
 
@@ -242,7 +256,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
 
         } else {
             tatami::parallelize([&](size_t thread, Index_ s, Index_ l) {
-                auto ext = tatami::consecutive_extractor<false>(p, !row, 0, otherdim, s, l);
+                auto ext = tatami::consecutive_extractor<false>(p, !row, static_cast<Index_>(0), otherdim, s, l);
                 std::vector<Value_> buffer(l);
 
                 LocalOutputBuffer<Output_> local_output(thread, s, l, output);

@@ -4,6 +4,7 @@
 #include "counts.hpp"
 #include "grouped_medians.hpp"
 #include "grouped_sums.hpp"
+#include "grouped_variances.hpp"
 #include "medians.hpp"
 #include "ranges.hpp"
 #include "sums.hpp"

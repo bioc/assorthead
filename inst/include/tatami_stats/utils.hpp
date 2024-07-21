@@ -16,17 +16,16 @@ namespace tatami_stats {
  * Count the total number of groups, typically for per-group memory allocations.
  *
  * @tparam Group_ Integer type for the group assignments.
- * @tparam Index_ Integer type for the number of observations.
  *
  * @param[in] group Pointer to an array of group assignments per observation.
- * Each assignment should be an integer in `[0, G)` where `G` is the total number of groups.
+ * Each assignment should be an integer in \f$[0, G)\f$ where \f$G\f$ is the total number of groups.
  * @param n Number of observations, i.e., the length of the array referenced by `group`.
  *
- * @return Total number of groups, i.e., `G`.
+ * @return Total number of groups, i.e., \f$G\f$.
  * Note that not all groups may actually have non-zero occurrences in `group`.
  */
-template<typename Group_, typename Size_>
-size_t total_groups(const Group_* group, Size_ n) {
+template<typename Group_>
+size_t total_groups(const Group_* group, size_t n) {
     if (n) {
         return static_cast<size_t>(*std::max_element(group, group + n)) + 1;
     } else {
@@ -38,13 +37,13 @@ size_t total_groups(const Group_* group, Size_ n) {
  * Count the occurrences of each group.
  *
  * @tparam Group_ Integer type for the group assignments.
- * @tparam Index_ Integer type for the number of observations.
+ * @tparam Size_ Integer type for the number of observations.
  *
  * @param[in] group Pointer to an array of group assignments per observation.
- * Each assignment should be an integer in `[0, G)` where `G` is the total number of groups.
+ * Each assignment should be an integer in \f$[0, G)\f$ where \f$G\f$ is the total number of groups.
  * @param n Number of observations, i.e., the length of the array referenced by `group`.
  *
- * @return Vector of length equal to `G`, containing the number of occurrences of each group.
+ * @return Vector of length equal to \f$G\f$, containing the number of occurrences of each group.
  */
 template<typename Group_, typename Size_>
 std::vector<Size_> tabulate_groups(const Group_* group, Size_ n) {
@@ -78,14 +77,27 @@ public:
      * @param start Index of the first objective vector in the contiguous block for this thread.
      * @param length Number of objective vectors in the contiguous block for this thread.
      * @param[out] output Pointer to the global output buffer.
+     * @param fill Initial value to fill the buffer.
      */
     template<typename Index_>
-    LocalOutputBuffer(size_t thread, Index_ start, Index_ length, Output_* output) : my_output(output + start), use_local(thread > 0), my_buffer(use_local ? length : 0) {
+    LocalOutputBuffer(size_t thread, Index_ start, Index_ length, Output_* output, Output_ fill) : my_output(output + start), use_local(thread > 0), my_buffer(use_local ? length : 0, fill) {
         if (!use_local) {
             // Setting to zero to match the initial behavior of 'my_buffer' when 'use_local = true'.
-            std::fill_n(my_output, length, static_cast<Output_>(0));
+            std::fill_n(my_output, length, fill);
         }
     }
+
+    /**
+     * Overloaded constructor that sets the default `fill = 0`.
+     *
+     * @tparam Index_ Type of the start index and length.
+     * @param thread Identity of the thread, starting from zero to the total number of threads.
+     * @param start Index of the first objective vector in the contiguous block for this thread.
+     * @param length Number of objective vectors in the contiguous block for this thread.
+     * @param[out] output Pointer to the global output buffer.
+     */
+    template<typename Index_>
+    LocalOutputBuffer(size_t thread, Index_ start, Index_ length, Output_* output) : LocalOutputBuffer(thread, start, length, output, 0) {}
 
     /**
      * Default constructor.
@@ -114,6 +126,37 @@ private:
     bool use_local = false;
     std::vector<Output_> my_buffer;
 };
+
+/**
+ * @cond
+ */
+namespace internal {
+
+template<typename Value_, class If_, class Else_>
+void nanable_ifelse(bool skip_nan, If_ iffun, Else_ elsefun) {
+    if constexpr(std::numeric_limits<Value_>::has_quiet_NaN) {
+        if (skip_nan) {
+            iffun();
+            return;
+        }
+    }
+    elsefun();
+}
+
+template<typename Value_, class If_, class Else_>
+auto nanable_ifelse_with_value(bool skip_nan, If_ iffun, Else_ elsefun) {
+    if constexpr(std::numeric_limits<Value_>::has_quiet_NaN) {
+        if (skip_nan) {
+            return iffun();
+        }
+    }
+    return elsefun();
+}
+
+}
+/**
+ * @endcond
+ */
 
 }
 

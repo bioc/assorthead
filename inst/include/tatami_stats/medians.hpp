@@ -2,6 +2,7 @@
 #define TATAMI_STATS__MEDIANS_HPP
 
 #include "tatami/tatami.hpp"
+#include "utils.hpp"
 
 #include <cmath>
 #include <vector>
@@ -62,11 +63,11 @@ Index_ translocate_nans(Value_* ptr, Index_& num) {
  */
 
 /**
- * Directly compute the median from a dense vector.
+ * Directly compute the median from a dense objective vector.
  *
- * @param[in] ptr Pointer to an array of values.
+ * @param[in] ptr Pointer to an array of length `num`, containing the values of the objective vector.
  * This may be modified on output.
- * @param num Length of the array.
+ * @param num Length of the objective vector, i.e., length of the array at `ptr`.
  * @param skip_nan See `Options::skip_nan` for details.
  *
  * @tparam Output_ Type of the output value.
@@ -78,11 +79,15 @@ Index_ translocate_nans(Value_* ptr, Index_& num) {
  */
 template<typename Output_ = double, typename Value_, typename Index_>
 Output_ direct(Value_* ptr, Index_ num, bool skip_nan) {
-    if (skip_nan) {
-        auto lost = internal::translocate_nans(ptr, num);
-        ptr += lost;
-        num -= lost;
-    }
+    ::tatami_stats::internal::nanable_ifelse<Value_>(
+        skip_nan,
+        [&]() {
+            auto lost = internal::translocate_nans(ptr, num);
+            ptr += lost;
+            num -= lost;
+        },
+        [&]() {}
+    );
 
     if (num == 0) {
         return std::numeric_limits<Output_>::quiet_NaN();
@@ -103,12 +108,12 @@ Output_ direct(Value_* ptr, Index_ num, bool skip_nan) {
 }
 
 /**
- * Directly compute the median from a sparse vector.
+ * Directly compute the median from a sparse objective vector.
  *
- * @param[in] value Pointer to an array of structural non-zero values.
+ * @param[in] value Pointer to an array of length `num_nonzero`, containing values of the structural non-zeroes.
  * This may be modified on output.
- * @param num_nonzero Number of non-zero elements, i.e., the length of the array referenced by `ptr`.
- * @param num_all Total number of elements in the set,
+ * @param num_nonzero Number of structural non-zeros in the objective vector.
+ * @param num_all Length of the obejctive vector, including the structural zeros,
  * i.e., `num_all - num_nonzero` is the number of zeros.
  * @param skip_nan See `Options::skip_nan` for details.
  *
@@ -125,12 +130,16 @@ Output_ direct(Value_* value, Index_ num_nonzero, Index_ num_all, bool skip_nan)
         return direct<Output_>(value, num_all, skip_nan);
     }
 
-    if (skip_nan) {
-        auto lost = internal::translocate_nans(value, num_nonzero);
-        value += lost;
-        num_nonzero -= lost;
-        num_all -= lost;
-    }
+    ::tatami_stats::internal::nanable_ifelse<Value_>(
+        skip_nan,
+        [&]() {
+            auto lost = internal::translocate_nans(value, num_nonzero);
+            value += lost;
+            num_nonzero -= lost;
+            num_all -= lost;
+        },
+        [&]() {}
+    );
 
     // Is the number of non-zeros less than the number of zeros?
     // If so, the median must be zero. Note that we calculate it
@@ -182,7 +191,8 @@ Output_ direct(Value_* value, Index_ num_nonzero, Index_ num_all, bool skip_nan)
  * @tparam Output_ Type of the output value.
  * This should be floating-point to store potential averages.
  *
- * @param row Whether to compute medians for the rows.
+ * @param row Whether to compute the median for each row.
+ * If false, the median is computed for each column instead.
  * @param p Pointer to a `tatami::Matrix`.
  * @param[out] output Pointer to an array of length equal to the number of rows (if `row = true`) or columns (otherwise).
  * On output, this will contain the row/column medians.
