@@ -75,9 +75,14 @@ simple_harvester manticore https://github.com/tatami-inc/manticore v1.0.2
 simple_harvester tatami_chunked https://github.com/tatami-inc/tatami_chunked v2.0.0
 
 simple_harvester byteme https://github.com/LTLA/byteme v1.2.2
+
 simple_harvester aarand https://github.com/LTLA/aarand v1.0.2
+
 simple_harvester powerit https://github.com/LTLA/powerit v2.0.0
+simple_harvester irlba https://github.com/LTLA/CppIrlba v2.0.0
+
 simple_harvester WeightedLowess https://github.com/LTLA/CppWeightedLowess v2.1.0
+
 simple_harvester kmeans https://github.com/LTLA/CppKmeans v3.0.1
 
 simple_harvester knncolle https://github.com/knncolle/knncolle v2.0.0
