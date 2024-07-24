@@ -31,6 +31,8 @@ git_clone() {
     local url=$2
     local version=$3
 
+    set -e
+    set -u
     local tmpname=sources/${name}
     if [ ! -e $tmpname ]
     then 
@@ -96,7 +98,7 @@ simple_harvester scran_norm https://github.com/libscran/scran_norm v0.1.0
 simple_harvester scran_variances https://github.com/libscran/scran_variances v0.1.0
 simple_harvester scran_pca https://github.com/libscran/scran_pca v0.1.0
 simple_harvester scran_graph_cluster https://github.com/libscran/scran_graph_cluster v0.1.0
-simple_harvester scran_markers https://github.com/libscran/scran_markers v0.1.0
+simple_harvester scran_markers https://github.com/libscran/scran_markers v0.1.1
 simple_harvester scran_aggregate https://github.com/libscran/scran_aggregate v0.2.0
 simple_harvester scran_blocks https://github.com/libscran/scran_blocks v0.1.0
 
