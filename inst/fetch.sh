@@ -71,10 +71,12 @@ simple_harvester() {
 }
 
 simple_harvester tatami https://github.com/tatami-inc/tatami v3.0.0
-simple_harvester tatami_r https://github.com/tatami-inc/tatami_r v2.0.0
 simple_harvester tatami_stats https://github.com/tatami-inc/tatami_stats v1.1.0
-simple_harvester manticore https://github.com/tatami-inc/manticore v1.0.2
+simple_harvester tatami_mult https://github.com/tatami-inc/tatami_mult v0.1.0
 simple_harvester tatami_chunked https://github.com/tatami-inc/tatami_chunked v2.0.0
+
+simple_harvester manticore https://github.com/tatami-inc/manticore v1.0.2
+simple_harvester tatami_r https://github.com/tatami-inc/tatami_r v2.0.0
 
 simple_harvester byteme https://github.com/LTLA/byteme v1.2.2
 
