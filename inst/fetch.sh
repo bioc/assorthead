@@ -89,7 +89,7 @@ simple_harvester WeightedLowess https://github.com/LTLA/CppWeightedLowess v2.1.0
 
 simple_harvester kmeans https://github.com/LTLA/CppKmeans v3.0.1
 
-simple_harvester knncolle https://github.com/knncolle/knncolle v2.0.0
+simple_harvester knncolle https://github.com/knncolle/knncolle v2.1.0
 simple_harvester knncolle_annoy https://github.com/knncolle/knncolle_annoy v0.1.0
 simple_harvester knncolle_hnsw https://github.com/knncolle/knncolle_hnsw v0.1.0
 

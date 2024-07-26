@@ -7,6 +7,7 @@
 #include "Builder.hpp"
 #include "Prebuilt.hpp"
 #include "MockMatrix.hpp"
+#include "report_all_neighbors.hpp"
 
 #include <vector>
 #include <type_traits>
@@ -47,6 +48,7 @@ public:
 private:                
     const BruteforcePrebuilt<Distance_, Dim_, Index_, Store_, Float_>* my_parent;
     internal::NeighborQueue<Index_, Float_> my_nearest;
+    std::vector<std::pair<Float_, Index_> > my_all_neighbors;
 
 private:
     static void normalize(std::vector<Float_>* output_distances) {
@@ -67,9 +69,32 @@ public:
     }
 
     void search(const Float_* query, Index_ k, std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) {
-        my_nearest.reset(k);
-        my_parent->search(query, my_nearest);
-        my_nearest.report(output_indices, output_distances);
+        if (k == 0) { // protect the NeighborQueue from k = 0.
+            internal::flush_output(output_indices, output_distances, 0);
+        } else {
+            my_nearest.reset(k);
+            my_parent->search(query, my_nearest);
+            my_nearest.report(output_indices, output_distances);
+            normalize(output_distances);
+        }
+    }
+
+    bool can_search_all() const {
+        return true;
+    }
+
+    void search_all(Index_ i, Float_ d, std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) {
+        my_all_neighbors.clear();
+        auto ptr = my_parent->my_data.data() + static_cast<size_t>(i) * my_parent->my_long_ndim; // cast to avoid overflow.
+        my_parent->search_all(ptr, d, my_all_neighbors);
+        internal::report_all_neighbors(my_all_neighbors, output_indices, output_distances, i);
+        normalize(output_distances);
+    }
+
+    void search_all(const Float_* query, Float_ d, std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) {
+        my_all_neighbors.clear();
+        my_parent->search_all(query, d, my_all_neighbors);
+        internal::report_all_neighbors(my_all_neighbors, output_indices, output_distances);
         normalize(output_distances);
     }
 };
@@ -123,6 +148,18 @@ private:
         auto copy = my_data.data();
         for (Index_ x = 0; x < my_obs; ++x, copy += my_dim) {
             nearest.add(x, Distance_::template raw_distance<Float_>(query, copy, my_dim));
+        }
+    }
+
+    template<typename Query_>
+    void search_all(const Query_* query, Float_ threshold, std::vector<std::pair<Float_, Index_> >& all_neighbors) const {
+        Float_ threshold_raw = threshold * threshold;
+        auto copy = my_data.data();
+        for (Index_ x = 0; x < my_obs; ++x, copy += my_dim) {
+            Float_ raw_distance = Distance_::template raw_distance<Float_>(query, copy, my_dim);
+            if (threshold_raw >= raw_distance) {
+                all_neighbors.emplace_back(raw_distance, x);
+            }
         }
     }
 

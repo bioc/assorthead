@@ -6,6 +6,7 @@
 #include "Prebuilt.hpp"
 #include "Builder.hpp"
 #include "MockMatrix.hpp"
+#include "report_all_neighbors.hpp"
 
 #include "kmeans/kmeans.hpp"
 
@@ -24,6 +25,10 @@ namespace knncolle {
 
 /** 
  * @brief Options for `KmknnBuilder` and `KmknnPrebuilt` construction. 
+ *
+ * This can also be created via the `KmknnBuilder::Options` definition,
+ * which ensures consistency with the template parameters used in `KmknnBuilder`.
+ *
  * @tparam Dim_ Integer type for the number of dimensions.
  * When constructing a `KmknnBuilder`, this should be the same as `Matrix_::dimension_type`.
  * @tparam Index_ Integer type for the indices.
@@ -86,6 +91,7 @@ public:
 private:                
     const KmknnPrebuilt<Distance_, Dim_, Index_, Store_, Float_>* my_parent;
     internal::NeighborQueue<Index_, Float_> my_nearest;
+    std::vector<std::pair<Float_, Index_> > my_all_neighbors;
     std::vector<std::pair<Float_, Index_> > center_order;
 
 public:
@@ -99,9 +105,33 @@ public:
     }
 
     void search(const Float_* query, Index_ k, std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) {
-        my_nearest.reset(k);
-        my_parent->search_nn(query, my_nearest, center_order);
-        my_nearest.report(output_indices, output_distances);
+        if (k == 0) { // protect the NeighborQueue from k = 0.
+            internal::flush_output(output_indices, output_distances, 0);
+        } else {
+            my_nearest.reset(k);
+            my_parent->search_nn(query, my_nearest, center_order);
+            my_nearest.report(output_indices, output_distances);
+            my_parent->normalize(output_indices, output_distances);
+        }
+    }
+
+    bool can_search_all() const {
+        return true;
+    }
+
+    void search_all(Index_ i, Float_ d, std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) {
+        my_all_neighbors.clear();
+        auto new_i = my_parent->my_new_location[i];
+        auto iptr = my_parent->my_data.data() + static_cast<size_t>(new_i) * my_parent->my_long_ndim; // cast to avoid overflow.
+        my_parent->search_all(iptr, d, my_all_neighbors);
+        internal::report_all_neighbors(my_all_neighbors, output_indices, output_distances, new_i);
+        my_parent->normalize(output_indices, output_distances);
+    }
+
+    void search_all(const Float_* query, Float_ d, std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) {
+        my_all_neighbors.clear();
+        my_parent->search_all(query, d, my_all_neighbors);
+        internal::report_all_neighbors(my_all_neighbors, output_indices, output_distances);
         my_parent->normalize(output_indices, output_distances);
     }
 };
@@ -285,8 +315,9 @@ private:
     template<typename Query_>
     void search_nn(const Query_* target, internal::NeighborQueue<Index_, Float_>& nearest, std::vector<std::pair<Float_, Index_> >& center_order) const { 
         /* Computing distances to all centers and sorting them. The aim is to
-         * go through the nearest centers first, to get the shortest
-         * 'threshold' possible through the rest of the search.
+         * go through the nearest centers first, to try to get the shortest
+         * threshold (i.e., 'nearest.limit()') possible at the start;
+         * this allows us to skip searches of the later clusters.
          */
         center_order.clear();
         size_t ncenters = my_sizes.size();
@@ -355,6 +386,56 @@ private:
         }
     }
 
+    template<typename Query_>
+    void search_all(const Query_* target, Float_ threshold, std::vector<std::pair<Float_, Index_> >& all_neighbors) const {
+        Float_ threshold_raw = threshold * threshold;
+
+        /* Computing distances to all centers. We don't sort them here 
+         * because the threshold is constant so there's no point.
+         */
+        Index_ ncenters = my_sizes.size();
+        auto center_ptr = my_centers.data(); 
+        for (Index_ center = 0; center < ncenters; ++center, center_ptr += my_dim) {
+            const Float_ dist2center = Distance_::normalize(Distance_::template raw_distance<Float_>(target, center_ptr, my_dim));
+
+            auto cur_nobs = my_sizes[center];
+            const Float_* dIt = my_dist_to_centroid.data() + my_offsets[center];
+            const Float_ maxdist = *(dIt + cur_nobs - 1);
+
+            /* The conditional expression below exploits the triangle inequality; it is equivalent to asking whether:
+             *     threshold + maxdist < dist2center
+             * All points (if any) within this cluster with distances above 'lower_bd' are potentially countable.
+             */
+            const Float_ lower_bd = dist2center - threshold;
+            if (maxdist < lower_bd) {
+                continue;
+            }
+
+            Index_ firstcell = std::lower_bound(dIt, dIt + cur_nobs, lower_bd) - dIt;
+#if KNNCOLLE_KMKNN_USE_UPPER
+            /* This exploits the reverse triangle inequality, to ignore points where:
+             *     threshold + dist2center < point-to-center distance
+             */
+            Float_ upper_bd = threshold + dist2center;
+#endif
+
+            const auto cur_start = my_offsets[center];
+            auto other_ptr = my_data.data() + my_long_ndim * static_cast<size_t>(cur_start + firstcell); // cast to avoid overflow issues.
+            for (auto celldex = firstcell; celldex < cur_nobs; ++celldex, other_ptr += my_dim) {
+#if KNNCOLLE_KMKNN_USE_UPPER
+                if (*(dIt + celldex) > upper_bd) {
+                    break;
+                }
+#endif
+
+                auto dist2cell_raw = Distance_::template raw_distance<Float_>(target, other_ptr, my_dim);
+                if (dist2cell_raw <= threshold_raw) {
+                    all_neighbors.emplace_back(dist2cell_raw, cur_start + celldex);
+                }
+            }
+        }
+    }
+
     void normalize(std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) const {
         if (output_indices) {
             for (auto& s : *output_indices) {
@@ -399,20 +480,33 @@ public:
  */
 template<class Distance_ = EuclideanDistance, class Matrix_ = SimpleMatrix<int, int, double>, typename Float_ = double>
 class KmknnBuilder : public Builder<Matrix_, Float_> {
+public:
+    /**
+     * Convenient name for the `KmknnOptions` class that ensures consistent template parametrization.
+     */
+    typedef KmknnOptions<typename Matrix_::dimension_type, typename Matrix_::index_type, typename Matrix_::data_type> Options;
+
 private:
-    KmknnOptions<typename Matrix_::dimension_type, typename Matrix_::index_type, typename Matrix_::data_type> my_options;
+    Options my_options;
 
 public:
     /**
      * @param options Further options for the KMKNN algorithm.
      */
-    KmknnBuilder(const KmknnOptions<typename Matrix_::dimension_type, typename Matrix_::index_type, typename Matrix_::data_type>& options) :
-        my_options(std::move(options)) {}
+    KmknnBuilder(Options options) : my_options(std::move(options)) {}
 
     /**
      * Default constructor.
      */
     KmknnBuilder() = default;
+
+    /**
+     * @return Options for the KMKNN algorithm.
+     * These can be modified prior to running `build_raw()` and friends.
+     */
+    Options& get_options() {
+        return my_options;
+    }
 
 public:
     Prebuilt<typename Matrix_::dimension_type, typename Matrix_::index_type, Float_>* build_raw(const Matrix_& data) const {
