@@ -1,4 +1,4 @@
 *.swp
 vignettes/*.html
-.sources
-.versions
+_sources
+_versions

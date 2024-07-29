@@ -2,12 +2,12 @@
 
 dir.create("licenses", showWarnings=FALSE)
 
-# Saving these in the above directory to avoid build/installation warnings.
-dir.create("../.versions", showWarnings=FALSE)
-dir.create("../.sources", showWarnings=FALSE) 
+# Saving these in the parent directory to avoid build/installation warnings.
+dir.create("../_versions", showWarnings=FALSE)
+dir.create("../_sources", showWarnings=FALSE) 
 
 get_version_file <- function(name) {
-    file.path("../.versions", name)
+    file.path("../_versions", name)
 }
 
 already_exists <- function(name, version) {
@@ -22,7 +22,7 @@ already_exists <- function(name, version) {
 }
 
 git_clone <- function(name, url, version) {
-    tmpname <- file.path("../.sources", name)
+    tmpname <- file.path("../_sources", name)
     if (!file.exists(tmpname)) {
         system2("git", c("clone", url, tmpname))
     } else {
