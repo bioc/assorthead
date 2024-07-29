@@ -9,4 +9,4 @@ All vendored libraries are stored in [`inst/include`](inst/include) and can be u
 The corresponding license for each library is stored in [`inst/licenses`](inst/licenses).
 
 To add new libraries or to update existing versions of the vendored libraries,
-maintainers of **assorthead** should edit and run [`inst/fetch.sh`](inst/fetch.sh). 
+maintainers of **assorthead** should edit [`inst/manifest.csv`](inst/manifest.csv) and run [`inst/fetch.R`](inst/fetch.R). 
