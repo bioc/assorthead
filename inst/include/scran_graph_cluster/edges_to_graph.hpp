@@ -29,7 +29,7 @@ namespace scran_graph_cluster {
 template<typename Vertex_>
 raiigraph::Graph edges_to_graph(size_t double_edges, const Vertex_* edges, size_t num_vertices, igraph_bool_t directed) {
     if constexpr(std::is_same<Vertex_, igraph_integer_t>::value) {
-        igraph_vector_int_t edge_view;
+        igraph_vector_int_t edge_view{};
         igraph_vector_int_view(&edge_view, edges, double_edges);
         return raiigraph::Graph(&edge_view, num_vertices, directed);
     } else {

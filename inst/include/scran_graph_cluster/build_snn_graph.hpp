@@ -164,7 +164,7 @@ void build_snn_graph(size_t num_cells, GetNeighbors_ get_neighbors, GetIndex_ ge
 
 #ifndef SCRAN_CUSTOM_PARALLEL
 #ifdef _OPENMP
-    #pragma omp parallel num_threads(nthreads)
+    #pragma omp parallel num_threads(options.num_threads)
 #endif
     {
 #else
