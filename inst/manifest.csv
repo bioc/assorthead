@@ -28,3 +28,4 @@ scran_blocks,https://github.com/libscran/scran_blocks,v0.1.0,"Blocking utilities
 annoy,https://github.com/spotify/annoy,v1.17.2,"Approximate nearest neighbors oh yeah"
 hnswlib,https://github.com/nmslib/hnswlib,v0.8.0,"Hierarchical navigable small worlds for finding nearest neighbors"
 Eigen,https://gitlab.com/libeigen/eigen,3.4.0,"C++ template library for linear algebra"
+gsdecon,https://github.com/libscran/gsdecon,0.1.0,"Compute gene set scores via eigengenes"
