@@ -24,11 +24,11 @@ already_exists <- function(name, version) {
 git_clone <- function(name, url, version) {
     tmpname <- file.path("../_sources", name)
     if (!file.exists(tmpname)) {
-        system2("git", c("clone", url, tmpname))
+        stopifnot(system2("git", c("clone", url, tmpname)) == "0")
     } else {
-        system2("git", c("-C", tmpname, "fetch", "--all"))
+        stopifnot(system2("git", c("-C", tmpname, "fetch", "--all")) == "0")
     }
-    system2("git", c("-C", tmpname, "checkout", version))
+    stopifnot(system2("git", c("-C", tmpname, "checkout", version)) == "0")
     return(tmpname)
 }
 
