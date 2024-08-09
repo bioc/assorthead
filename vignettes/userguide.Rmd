@@ -16,7 +16,7 @@ vignette: >
 ```{r style, echo=FALSE}
 library(BiocStyle)
 knitr::opts_chunk$set(error=FALSE, warning=FALSE, message=FALSE)
-self <- Biocpkg("assortedhead")
+self <- Biocpkg("assorthead")
 ```
 
 # Overview
@@ -57,7 +57,16 @@ for (i in seq_len(nrow(manifest))) {
 }
 ```
 
+# Using interfaces
+
+The `r Biocpkg("beachmat")` package contains the `initializeCpp()` function, which creates an external pointer to a `tatami::Matrix`.
+Similarly, the `r Biocpkg("BiocNeighbors")` package can create external pointers to various **knncolle** objects via its `defineBuilder()` and `buildIndex()` functions.
+Downstream packages can use these pointers in their own C++ code by compiling against the relevant interfaces in `r self`.
+This means that downstream packages do not need to re-compile all of the relevant header libraries to get full functionality of `r Biocpkg("beachmat")`, `r Biocpkg("BiocNeighbors")`, etc.
+It also allows the C++ code of downstream packages to handle extensions to each framework, e.g., new matrix types in `r Biocpkg("beachmat.hdf5")`.
+Check out each of the packages for more specific instructions on how to use its external pointers.
+
 # Contributing
 
 If you want to add new libraries or update existing versions,
-make a [pull request](https://github.com/LTLA/assorthead/pulls) with appropriate motifications in the `inst/fetch.sh` file.
+make a [pull request](https://github.com/LTLA/assorthead/pulls) with appropriate motifications in the `inst/fetch.R` file.
