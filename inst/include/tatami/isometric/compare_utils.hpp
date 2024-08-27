@@ -1,6 +1,8 @@
 #ifndef TATAMI_COMPARE_UTILS_HPP
 #define TATAMI_COMPARE_UTILS_HPP
 
+#include <cmath>
+
 /**
  * @file compare_utils.hpp
  *
@@ -24,20 +26,52 @@ enum class CompareOperation : char {
 /**
  * @cond
  */
-template<CompareOperation op_, typename Scalar_, typename Value_>
-void delayed_compare_run(Value_& val, Scalar_ scalar) {
+#ifdef _OPENMP
+#pragma omp declare simd 
+#endif
+template<CompareOperation op_, typename Value_>
+bool delayed_compare(Value_ val, Value_ scalar) {
     if constexpr(op_ == CompareOperation::EQUAL) {
-        val = val == scalar;
+        return val == scalar;
     } else if constexpr(op_ == CompareOperation::GREATER_THAN) {
-        val = val > scalar;
+        return val > scalar;
     } else if constexpr(op_ == CompareOperation::LESS_THAN) {
-        val = val < scalar;
+        return val < scalar;
     } else if constexpr(op_ == CompareOperation::GREATER_THAN_OR_EQUAL) {
-        val = val >= scalar;
+        return val >= scalar;
     } else if constexpr(op_ == CompareOperation::LESS_THAN_OR_EQUAL) {
-        val = val <= scalar;
+        return val <= scalar;
     } else { // NOT EQUAL.
-        val = val != scalar;
+        return val != scalar;
+    }
+}
+/**
+ * @endcond
+ */
+
+/**
+ * Type of comparison operation for special IEEE values.
+ */
+enum class SpecialCompareOperation : char {
+    ISNAN,
+    ISINF,
+    ISFINITE
+};
+
+/**
+ * @cond
+ */
+#ifdef _OPENMP
+#pragma omp declare simd 
+#endif
+template<SpecialCompareOperation op_, bool pass_, typename Value_>
+bool delayed_special_compare(Value_ val) {
+    if constexpr(op_ == SpecialCompareOperation::ISNAN) {
+        return pass_ == std::isnan(val);
+    } else if constexpr(op_ == SpecialCompareOperation::ISINF) {
+        return pass_ == std::isinf(val);
+    } else {
+        return pass_ == std::isfinite(val);
     }
 }
 /**

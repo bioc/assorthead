@@ -36,6 +36,7 @@ struct Options {
 
     /**
      * Number of threads to use when computing medians across a `tatami::Matrix`.
+     * See `tatami::parallelize()` for more details on the parallelization mechanism.
      */
     int num_threads = 1;
 };
@@ -96,15 +97,19 @@ Output_ direct(Value_* ptr, Index_ num, bool skip_nan) {
     size_t halfway = num / 2;
     bool is_even = (num % 2 == 0);
 
-    // At some point, I found two nth_element calls to be faster than partial_sort.
     std::nth_element(ptr, ptr + halfway, ptr + num);
-    double medtmp = *(ptr + halfway);
-    if (is_even) {
-        std::nth_element(ptr, ptr + halfway - 1, ptr + num);
-        return (medtmp + *(ptr + halfway - 1))/2;
-    } else {
+    Output_ medtmp = *(ptr + halfway);
+    if (!is_even) {
         return medtmp;
     }
+
+    // 'nth_element()' reorganizes 'ptr' so that everything below 'halfway' is
+    // less than or equal to 'ptr[halfway]', while everything above 'halfway'
+    // is greater than or equal to 'ptr[halfway]'. Thus, to get the element
+    // immediately before 'halfway' in the sort order, we just need to find the
+    // maximum from '[0, halfway)'.
+    Output_ other = *std::max_element(ptr, ptr + halfway);
+    return (medtmp + other)/2;
 }
 
 /**
@@ -126,6 +131,9 @@ Output_ direct(Value_* ptr, Index_ num, bool skip_nan) {
  */
 template<typename Output_ = double, typename Value_, typename Index_>
 Output_ direct(Value_* value, Index_ num_nonzero, Index_ num_all, bool skip_nan) {
+    // Fallback to the dense code if there are no structural zeros. This is not
+    // just for efficiency as the downstream averaging code assumes that there
+    // is at least one structural zero when considering its scenarios.
     if (num_nonzero == num_all) {
         return direct<Output_>(value, num_all, skip_nan);
     }
@@ -151,35 +159,51 @@ Output_ direct(Value_* value, Index_ num_nonzero, Index_ num_all, bool skip_nan)
     size_t halfway = num_all / 2;
     bool is_even = (num_all % 2 == 0);
 
-    auto vend = value + num_nonzero;
-    std::sort(value, vend);
-    size_t zeropos = std::lower_bound(value, vend, 0) - value;
-    size_t nzero = num_all - num_nonzero;
+    size_t num_zero = num_all - num_nonzero;
+    size_t num_negative = 0;
+    for (Index_ i = 0; i < num_nonzero; ++i) {
+        num_negative += (value[i] < 0);
+    }
 
     if (!is_even) {
-        if (zeropos > halfway) {
+        if (num_negative > halfway) {
+            std::nth_element(value, value + halfway, value + num_nonzero);
             return value[halfway];
-        } else if (halfway >= zeropos + nzero) {
-            return value[halfway - nzero];
+
+        } else if (halfway >= num_negative + num_zero) {
+            size_t skip_zeros = halfway - num_zero;
+            std::nth_element(value, value + skip_zeros, value + num_nonzero);
+            return value[skip_zeros];
+
         } else {
-            return 0; // zero is the median.
+            return 0;
         }
     }
 
-    double tmp = 0;
-    if (zeropos > halfway) {
-        tmp = value[halfway] + value[halfway - 1];
-    } else if (zeropos == halfway) {
-        // guaranteed to be at least 1 zero.
-        tmp += value[halfway - 1];
-    } else if (zeropos < halfway && zeropos + nzero > halfway) {
-        ; // zero is the median.
-    } else if (zeropos + nzero == halfway) {
-        // guaranteed to be at least 1 zero.
-        tmp += value[halfway - nzero];
-    } else {
-        tmp = value[halfway - nzero] + value[halfway - nzero - 1];
+    Output_ tmp = 0;
+    if (num_negative > halfway) { // both halves of the median are negative.
+        std::nth_element(value, value + halfway, value + num_nonzero);
+        tmp = value[halfway] + *(std::max_element(value, value + halfway)); // max_element gets the sorted value at halfway - 1, see explanation for the dense case.
+
+    } else if (num_negative == halfway) { // the upper half is guaranteed to be zero.
+        size_t below_halfway = halfway - 1;
+        std::nth_element(value, value + below_halfway, value + num_nonzero);
+        tmp = value[below_halfway];
+
+    } else if (num_negative < halfway && num_negative + num_zero > halfway) { // both halves are zero, so zero is the median.
+        ;
+
+    } else if (num_negative + num_zero == halfway) { // the lower half is guaranteed to be zero.
+        size_t skip_zeros = halfway - num_zero;
+        std::nth_element(value, value + skip_zeros, value + num_nonzero);
+        tmp = value[skip_zeros];
+
+    } else { // both halves of the median are non-negative.
+        size_t skip_zeros = halfway - num_zero;
+        std::nth_element(value, value + skip_zeros, value + num_nonzero);
+        tmp = value[skip_zeros] + *(std::max_element(value, value + skip_zeros)); // max_element gets the sorted value at skip_zeros - 1, see explanation for the dense case.
     }
+
     return tmp / 2;
 }
 

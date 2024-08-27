@@ -33,6 +33,7 @@ struct Options {
 
     /**
      * Number of threads to use when computing sums across a `tatami::Matrix`.
+     * See `tatami::parallelize()` for more details on the parallelization mechanism.
      */
     int num_threads = 1;
 };
@@ -106,7 +107,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, const Group_* grou
             tatami::Options opt;
             opt.sparse_ordered_index = false; 
 
-            tatami::parallelize([&](size_t thread, Index_ start, Index_ len) -> void {
+            tatami::parallelize([&](int thread, Index_ start, Index_ len) -> void {
                 std::vector<sums::RunningSparse<Output_, Value_, Index_> > runners;
                 runners.reserve(num_groups);
                 std::vector<LocalOutputBuffer<Output_> > local_output;
@@ -167,7 +168,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, const Group_* grou
             }, dim, sopt.num_threads);
 
         } else {
-            tatami::parallelize([&](size_t thread, Index_ start, Index_ len) -> void {
+            tatami::parallelize([&](int thread, Index_ start, Index_ len) -> void {
                 std::vector<sums::RunningDense<Output_, Value_, Index_> > runners;
                 runners.reserve(num_groups);
                 std::vector<LocalOutputBuffer<Output_> > local_output;

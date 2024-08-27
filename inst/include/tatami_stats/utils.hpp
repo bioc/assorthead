@@ -113,6 +113,14 @@ public:
     }
 
     /**
+     * @return Const pointer to an output buffer to use for this thread.
+     * This contains at least `length` addressable elements (see the argument of the same name in the constructor). 
+     */
+    const Output_* data() const {
+        return (use_local ? my_buffer.data() : my_output);
+    }
+
+    /**
      * Transfer results from the local buffer to the global buffer (i.e., `output` in the constructor).
      */
     void transfer() {

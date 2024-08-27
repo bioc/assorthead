@@ -40,24 +40,47 @@ public:
     /**
      * @cond
      */
-    template<typename Value_, typename Index_>
-    void dense(bool, Index_, Index_, Index_ length, Value_* left_buffer, const Value_* right_buffer) const {
+    template<typename Index_, typename InputValue_, typename OutputValue_>
+    void dense(bool, Index_, Index_, Index_ length, const InputValue_* left_buffer, const InputValue_* right_buffer, OutputValue_* output_buffer) const {
+#ifdef _OPENMP
+        #pragma omp simd 
+#endif
         for (Index_ i = 0; i < length; ++i) {
-            delayed_arithmetic_run<op_, true>(left_buffer[i], right_buffer[i]);
+            if constexpr(std::is_same<InputValue_, OutputValue_>::value) {
+                auto& val = output_buffer[i];
+                val = delayed_arithmetic<op_, true>(val, right_buffer[i]);
+            } else {
+                output_buffer[i] = delayed_arithmetic<op_, true>(left_buffer[i], right_buffer[i]);
+            }
         }
     }
 
-    template<typename Value_, typename Index_>
-    void dense(bool, Index_, const std::vector<Index_>& indices, Value_* left_buffer, const Value_* right_buffer) const {
-        for (Index_ i = 0, length = indices.size(); i < length; ++i) {
-            delayed_arithmetic_run<op_, true>(left_buffer[i], right_buffer[i]);
+    template<typename Index_, typename InputValue_, typename OutputValue_>
+    void dense(bool, Index_, const std::vector<Index_>& indices, const InputValue_* left_buffer, const InputValue_* right_buffer, OutputValue_* output_buffer) const {
+        Index_ length = indices.size();
+#ifdef _OPENMP
+        #pragma omp simd 
+#endif
+        for (Index_ i = 0; i < length; ++i) {
+            if constexpr(std::is_same<InputValue_, OutputValue_>::value) {
+                auto& val = output_buffer[i];
+                val = delayed_arithmetic<op_, true>(val, right_buffer[i]);
+            } else {
+                output_buffer[i] = delayed_arithmetic<op_, true>(left_buffer[i], right_buffer[i]);
+            }
         }
     }
 
-    template<typename Value_, typename Index_>
-    Index_ sparse(bool, Index_, const SparseRange<Value_, Index_>& left, const SparseRange<Value_, Index_>& right, Value_* value_buffer, Index_* index_buffer, bool needs_value, bool needs_index) const {
-        // Don't bother storing an explicit zero for MULTIPLY operations when either entry is zero.
-        constexpr bool must_have_both = (op_ == ArithmeticOperation::MULTIPLY);
+    template<typename Index_, typename InputValue_, typename OutputValue_>
+    Index_ sparse(bool, Index_, const SparseRange<InputValue_, Index_>& left, const SparseRange<InputValue_, Index_>& right, OutputValue_* value_buffer, Index_* index_buffer, bool needs_value, bool needs_index) const {
+        // Technically, MULTIPLY could skip processing if either is a zero.
+        // However, this is not correct if the other value is an NaN/Inf, as
+        // the product would be a NaN, not a zero; so we have to err on the
+        // side of caution of attemping the operation.
+        constexpr bool must_have_both = (op_ == ArithmeticOperation::MULTIPLY && 
+                                         !std::numeric_limits<InputValue_>::has_quiet_NaN && 
+                                         !std::numeric_limits<InputValue_>::has_infinity);
+
         return delayed_binary_isometric_sparse_operation<must_have_both>(
             left, 
             right, 
@@ -65,19 +88,19 @@ public:
             index_buffer, 
             needs_value,
             needs_index,
-            [](Value_& l, Value_ r) { delayed_arithmetic_run<op_, true>(l, r); }
+            [](InputValue_ l, InputValue_ r) -> auto { 
+                return delayed_arithmetic<op_, true>(l, r); 
+            }
         );
     }
 
-    template<typename Value_, typename Index_>
-    Value_ fill(bool, Index_) const {
-        if constexpr(known_sparse) {
+    template<typename OutputValue_, typename InputValue_, typename Index_>
+    OutputValue_ fill(bool, Index_) const {
+        if constexpr(has_unsafe_divide_by_zero<op_, true, InputValue_, InputValue_>()) {
+            throw std::runtime_error("division by zero is not supported");
             return 0;
-        } else if constexpr(op_ == ArithmeticOperation::POWER) {
-            return 1;
         } else {
-            // Zero divided/modulo by zero gives NaN.
-            return std::numeric_limits<Value_>::quiet_NaN();
+            return delayed_arithmetic<op_, true, InputValue_>(0, 0);
         }
     }
 

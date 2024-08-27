@@ -35,7 +35,7 @@ namespace counts {
  * @param p Pointer to a `tatami::Matrix`.
  * @param[out] output Pointer to an array of length equal to the number of rows (if `row = true`) or columns (otherwise).
  * On output, this will contain the row/column variances.
- * @param num_threads Number of threads to use.
+ * @param num_threads Number of threads to use, for parallelization via `tatami::parallelize()`.
  * @param condition Function that accepts a `Value_` and returns a boolean.
  * This function is also responsible for handling any NaNs that might be present in `p`.
  */
@@ -159,6 +159,7 @@ namespace nan {
 struct Options {
     /**
      * Number of threads to use when obtaining counts across a `tatami::Matrix`.
+     * See `tatami::parallelize()` for more details on the parallelization mechanism.
      */
     int num_threads = 1;
 };
@@ -265,6 +266,7 @@ namespace zero {
 struct Options {
     /**
      * Number of threads to use when obtaining counts across a `tatami::Matrix`.
+     * See `tatami::parallelize()` for more details on the parallelization mechanism.
      */
     int num_threads = 1;
 };

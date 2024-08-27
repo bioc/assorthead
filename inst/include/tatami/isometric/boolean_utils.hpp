@@ -22,16 +22,19 @@ enum class BooleanOperation : char {
 /**
  * @cond
  */
-template<BooleanOperation op_, typename Value_>
-void delayed_boolean_run(Value_& val, bool scalar) {
+#ifdef _OPENMP
+#pragma omp declare simd 
+#endif
+template<BooleanOperation op_>
+bool delayed_boolean(bool val, bool scalar) {
     if constexpr(op_ == BooleanOperation::AND) {
-        val = val && scalar;
+        return val && scalar;
     } else if constexpr(op_ == BooleanOperation::OR) {
-        val = val || scalar;
+        return val || scalar;
     } else if constexpr(op_ == BooleanOperation::XOR) {
-        val = static_cast<bool>(val) != scalar;
+        return val != scalar;
     } else { // EQUAL.
-        val = static_cast<bool>(val) == scalar;
+        return val == scalar;
     }
 }
 /**

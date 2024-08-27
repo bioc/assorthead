@@ -36,6 +36,7 @@ struct Options {
 
     /**
      * Number of threads to use when computing variances across a `tatami::Matrix`.
+     * See `tatami::parallelize()` for more details on the parallelization mechanism.
      */
     int num_threads = 1;
 };
@@ -402,7 +403,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
         if (direct) {
             tatami::Options opt;
             opt.sparse_extract_index = false;
-            tatami::parallelize([&](size_t, Index_ s, Index_ l) {
+            tatami::parallelize([&](int, Index_ s, Index_ l) {
                 auto ext = tatami::consecutive_extractor<true>(p, row, s, l);
                 std::vector<Value_> vbuffer(otherdim);
                 for (Index_ x = 0; x < l; ++x) {
@@ -412,7 +413,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
             }, dim, vopt.num_threads);
 
         } else {
-            tatami::parallelize([&](size_t thread, Index_ s, Index_ l) {
+            tatami::parallelize([&](int thread, Index_ s, Index_ l) {
                 auto ext = tatami::consecutive_extractor<true>(p, !row, static_cast<Index_>(0), otherdim, s, l);
                 std::vector<Value_> vbuffer(l);
                 std::vector<Index_> ibuffer(l);
@@ -433,7 +434,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
 
     } else {
         if (direct) {
-            tatami::parallelize([&](size_t, Index_ s, Index_ l) {
+            tatami::parallelize([&](int, Index_ s, Index_ l) {
                 auto ext = tatami::consecutive_extractor<false>(p, row, s, l);
                 std::vector<Value_> buffer(otherdim);
                 for (Index_ x = 0; x < l; ++x) {
@@ -443,7 +444,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
             }, dim, vopt.num_threads);
 
         } else {
-            tatami::parallelize([&](size_t thread, Index_ s, Index_ l) {
+            tatami::parallelize([&](int thread, Index_ s, Index_ l) {
                 auto ext = tatami::consecutive_extractor<false>(p, !row, static_cast<Index_>(0), otherdim, s, l);
                 std::vector<Value_> buffer(l);
 

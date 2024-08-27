@@ -12,11 +12,23 @@
 #include "sparse/compress_sparse_triplets.hpp"
 
 #include "isometric/unary/DelayedUnaryIsometricOperation.hpp"
+#include "isometric/unary/arithmetic_helpers.hpp"
+#include "isometric/unary/math_helpers.hpp"
+#include "isometric/unary/compare_helpers.hpp"
+#include "isometric/unary/boolean_helpers.hpp"
+#include "isometric/unary/substitute_helpers.hpp"
+#include "isometric/unary/mock_helpers.hpp"
+
 #include "isometric/binary/DelayedBinaryIsometricOperation.hpp"
+#include "isometric/binary/arithmetic_helpers.hpp"
+#include "isometric/binary/compare_helpers.hpp"
+#include "isometric/binary/boolean_helpers.hpp"
+#include "isometric/binary/mock_helpers.hpp"
 
 #include "other/DelayedBind.hpp"
 #include "other/DelayedCast.hpp"
 #include "other/DelayedTranspose.hpp"
+#include "other/ConstantMatrix.hpp"
 
 #include "subset/DelayedSubsetBlock.hpp"
 #include "subset/make_DelayedSubset.hpp"
