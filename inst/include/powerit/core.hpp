@@ -12,6 +12,11 @@
  * @brief Core data structures and calculations.
  */
 
+#ifndef POWERIT_CUSTOM_PARALLEL
+#include "subpar/subpar.hpp"
+#define POWERIT_CUSTOM_PARALLEL ::subpar::parallelize
+#endif
+
 namespace powerit {
 
 /**
@@ -32,18 +37,11 @@ struct Options {
     double tolerance = 0.000001;
 
     /**
-     * Number of threads to use for the matrix multiplication.
+     * Number of threads to use for the matrix multiplication in `compute()`.
+     * The parallelization scheme depends on the definition of the `POWERIT_CUSTOM_PARALLEL` function-like macro.
+     * If undefined by the user, this macro defaults to `subpar::parallelize()` and should accept the same arguments.
      *
-     * By default, `compute()` uses OpenMP for parallelization.
-     * Applications can override this by setting the `POWERIT_CUSTOM_PARALLEL` function-like macro, e.g., in environments where OpenMP is not available.
-     * This macro should accept three arguments:
-     * - `order`, a `size_t` specifying the number of dimensions in the input matrix.
-     * - `num_threads`, an `int` specifying the number of threads to use.
-     * - `fun`, a function that accepts two `size_t` values.
-     * .
-     * The macro should partition the matrix dimension elements into blocks, assign each block to a thread and call `fun()` in each thread with the start position and length of its block.
-     *
-     * For `compute_core()`, the parallelization scheme depends on the provided `multiply()`.
+     * For `compute_core()`, the parallelization scheme depends on the provided `multiply()`, and this option has no effect.
      */
     int num_threads = 1;
 };

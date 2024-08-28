@@ -32,7 +32,7 @@ struct InitializeKmeansppOptions {
 
     /** 
      * Number of threads to use.
-     * This should be positive.
+     * The parallelization scheme is defined by the #KMEANS_CUSTOM_PARALLEL macro.
      */
     int num_threads = 1;
 };
@@ -81,7 +81,7 @@ std::vector<typename Matrix_::index_type> run_kmeanspp(const Matrix_& data, Clus
         if (!sofar.empty()) {
             auto last_ptr = data.get_observation(sofar.back(), last_work);
 
-            internal::parallelize(nobs, nthreads, [&](int, Index_ start, Index_ length) {
+            KMEANS_CUSTOM_PARALLEL(nthreads, nobs, [&](int, Index_ start, Index_ length) {
                 auto curwork = data.create_workspace();
                 for (Index_ obs = start, end = start + length; obs < end; ++obs) {
                     if (mindist[obs]) {
@@ -157,6 +157,15 @@ public:
      * Default constructor.
      */
     InitializeKmeanspp() = default;
+
+public:
+    /**
+     * @return Options for **kmeans++** partitioning,
+     * to be modified prior to calling `run()`.
+     */
+    InitializeKmeansppOptions& get_options() {
+        return my_options;
+    }
 
 public:
     Cluster_ run(const Matrix_& matrix, Cluster_ ncenters, Float_* centers) const {
