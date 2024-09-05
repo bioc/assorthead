@@ -124,23 +124,24 @@ std::pair<Output_, Output_> direct(const Value_* value, Index_ num_nonzero, Inde
     ::tatami_stats::internal::nanable_ifelse<Value_>(
         skip_nan,
         [&]() {
-            for (Index_ i = 0; i < num_nonzero; ++i, ++value) {
-                auto val = *value;
+            for (Index_ i = 0; i < num_nonzero; ++i) {
+                auto val = value[i];
                 if (!std::isnan(val)) {
-                    var += (val - mean) * (val - mean);
+                    auto delta = static_cast<Output_>(val) - mean;
+                    var += delta * delta;
                 }
             }
         },
         [&]() {
-            for (Index_ i = 0; i < num_nonzero; ++i, ++value) {
-                auto val = *value;
-                var += (val - mean) * (val - mean);
+            for (Index_ i = 0; i < num_nonzero; ++i) {
+                auto delta = static_cast<Output_>(value[i]) - mean;
+                var += delta * delta;
             }
         }
     );
 
     if (num_nonzero < num_all) {
-        var += (num_all - num_nonzero) * mean * mean;
+        var += static_cast<Output_>(num_all - num_nonzero) * mean * mean;
     }
 
     if (count == 0) {

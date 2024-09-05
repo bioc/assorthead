@@ -2,6 +2,7 @@
 #define TATAMI_STATS_COUNTS_HPP
 
 #include "tatami/tatami.hpp"
+#include "subpar/subpar.hpp"
 
 #include <vector>
 #include <algorithm>
@@ -86,6 +87,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, i
         }
 
     } else {
+        num_threads = subpar::sanitize_num_workers(num_threads, otherdim); // provides some protection against silly num_threads iputs.
         std::vector<Output_*> threaded_output_ptrs(num_threads, output);
         std::vector<std::vector<Output_> > threaded_output(num_threads - 1);
         for (int t = 1; t < num_threads; ++t) {

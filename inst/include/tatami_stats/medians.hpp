@@ -264,7 +264,7 @@ void apply(bool row, const tatami::Matrix<Value_, Index_>* p, Output_* output, c
  * @tparam Value_ Type of the matrix value.
  * @tparam Index_ Type of the row/column indices.
  *
- * @param p Shared pointer to a `tatami::Matrix`.
+ * @param p Pointer to a `tatami::Matrix`.
  * @param mopt Median calculation options.
  *
  * @return A vector of length equal to the number of columns, containing the column medians.
@@ -284,7 +284,7 @@ std::vector<Output_> by_column(const tatami::Matrix<Value_, Index_>* p, const Op
  * @tparam Value_ Type of the matrix value.
  * @tparam Index_ Type of the row/column indices.
  *
- * @param p Shared pointer to a `tatami::Matrix`.
+ * @param p Pointer to a `tatami::Matrix`.
  *
  * @return A vector of length equal to the number of columns, containing the column medians.
  */
@@ -301,7 +301,7 @@ std::vector<Output_> by_column(const tatami::Matrix<Value_, Index_>* p) {
  * @tparam Value_ Type of the matrix value.
  * @tparam Index_ Type of the row/column indices.
  *
- * @param p Shared pointer to a `tatami::Matrix`.
+ * @param p Pointer to a `tatami::Matrix`.
  * @param mopt Median calculation options.
  *
  * @return A vector of length equal to the number of rows, containing the row medians.
@@ -321,7 +321,7 @@ std::vector<Output_> by_row(const tatami::Matrix<Value_, Index_>* p, const Optio
  * @tparam Value_ Type of the matrix value.
  * @tparam Index_ Type of the row/column indices.
  *
- * @param p Shared pointer to a `tatami::Matrix`.
+ * @param p Pointer to a `tatami::Matrix`.
  *
  * @return A vector of length equal to the number of rows, containing the row medians.
  */
