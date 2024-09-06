@@ -3,6 +3,8 @@
 
 #include <vector>
 #include <type_traits>
+#include <algorithm>
+#include <memory>
 
 #include "knncolle/knncolle.hpp"
 #include "annoy/annoylib.h"
@@ -10,10 +12,13 @@
 
 /**
  * @file knncolle_annoy.hpp
- *
  * @brief Approximate nearest neighbor search with Annoy.
  */
 
+/**
+ * @namespace knncolle_annoy
+ * @brief Approximate nearest neighbor search with Annoy.
+ */
 namespace knncolle_annoy {
 
 /**
@@ -64,7 +69,7 @@ private:
         if (my_parent->my_search_mult < 0) {
             return -1;
         } else {
-            return my_parent->my_search_mult * k + 0.5; // rounded up.
+            return my_parent->my_search_mult * static_cast<double>(k) + 0.5; // rounded.
         }
     }
 
@@ -136,6 +141,9 @@ private:
     }
 
 public:
+    /**
+     * @copydoc knncolle::Searcher::search() 
+     */
     void search(Index_ i, Index_ k, std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) {
         Index_ kp1 = k + 1; // +1, as it forgets to discard 'self'.
         auto ptrs = obtain_pointers(output_indices, output_distances, kp1);
@@ -198,6 +206,9 @@ private:
     }
 
 public:
+    /**
+     * @copydoc knncolle::Searcher::search() 
+     */
     void search(const Float_* query, Index_ k, std::vector<Index_>* output_indices, std::vector<Float_>* output_distances) {
         if constexpr(same_internal_data) {
             search_raw(query, k, output_indices, output_distances);
@@ -212,7 +223,6 @@ public:
  * @brief Prebuilt index for an Annoy search.
  *
  * Instances of this class are usually constructed using `AnnoyBuilder::build_raw()`.
- * The `initialize()` method will create an instance of the `AnnoySearcher` class.
  *
  * @tparam Distance_ An **Annoy** class to compute the distance between vectors, e.g., `Annoy::Euclidean`.
  * @tparam Dim_ Integer type for the number of dimensions.
@@ -268,14 +278,23 @@ private:
     friend class AnnoySearcher<Distance_, Dim_, Index_, Float_, InternalIndex_, InternalData_>;
 
 public:
+    /**
+     * @copydoc knncolle::Prebuilt::num_dimensions() 
+     */
     Dim_ num_dimensions() const {
         return my_dim;
     }
 
+    /**
+     * @copydoc knncolle::Prebuilt::num_observations() 
+     */
     Index_ num_observations() const {
         return my_obs;
     }
 
+    /**
+     * Creates an `AnnoySearcher` instance.
+     */
     std::unique_ptr<knncolle::Searcher<Index_, Float_> > initialize() const {
         return std::make_unique<AnnoySearcher<Distance_, Dim_, Index_, Float_, InternalIndex_, InternalData_> >(this);
     }
@@ -289,8 +308,6 @@ public:
  * Multiple trees are constructed in this manner, each of which is different due to the random choice of hyperplanes.
  * For a given query point, each tree is searched to identify the subset of all points in the same leaf node as the query point. 
  * The union of these subsets across all trees is exhaustively searched to identify the actual nearest neighbors to the query.
- *
- * The `build_raw()` method will create an instance of the `AnnoyPrebuilt` class.
  *
  * @see
  * Bernhardsson E (2018).
@@ -326,7 +343,18 @@ public:
      */
     AnnoyBuilder() = default;
 
+    /**
+     * @return Options to the Annoy algorithm,
+     * to be modified prior to calling `build_raw()` and friends.
+     */
+    AnnoyOptions& get_options() {
+        return my_options;
+    }
+
 public:
+    /**
+     * Creates an `AnnoyPrebuilt` instance.
+     */
     knncolle::Prebuilt<typename Matrix_::dimension_type, typename Matrix_::index_type, Float_>* build_raw(const Matrix_& data) const {
         return new AnnoyPrebuilt<Distance_, typename Matrix_::dimension_type, typename Matrix_::index_type, Float_, InternalIndex_, InternalData_>(data, my_options);
     }
