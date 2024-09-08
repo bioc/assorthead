@@ -1,5 +1,10 @@
 # Assorted header-only C++ libraries for Bioconductor
 
+|Build|Status|
+|-----|----|
+| Bioc-release | [![](http://bioconductor.org/shields/build/release/bioc/assorthead.svg)](http://bioconductor.org/checkResults/release/bioc-LATEST/assorthead) |
+| Bioc-devel   | [![](http://bioconductor.org/shields/build/devel/bioc/assorthead.svg)](http://bioconductor.org/checkResults/devel/bioc-LATEST/assorthead) | 
+
 This package vendors an assortment of header-only C++ libraries for use in Bioconductor packages. 
 The use of a central repository avoids duplicate vendoring of libraries across multiple R packages,
 and enables better coordination of version updates across cohorts of interdependent C++ libraries.
