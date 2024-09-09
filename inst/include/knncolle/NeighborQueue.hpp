@@ -61,7 +61,7 @@ public:
             if (my_nearest.size() == my_neighbors) {
                 my_full = true;
             }
-        } else if (d < limit()) {
+        } else {
             my_nearest.emplace(d, i);
             my_nearest.pop();
         }
