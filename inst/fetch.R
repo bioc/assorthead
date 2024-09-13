@@ -27,6 +27,7 @@ git_clone <- function(name, url, version) {
         stopifnot(system2("git", c("clone", url, tmpname)) == "0")
     } else {
         stopifnot(system2("git", c("-C", tmpname, "fetch", "--all")) == "0")
+        stopifnot(system2("git", c("-C", tmpname, "pull")) == "0")
     }
     stopifnot(system2("git", c("-C", tmpname, "checkout", version)) == "0")
     return(tmpname)
