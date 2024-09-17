@@ -43,28 +43,30 @@ struct FitVarianceTrendOptions {
     double span = 0.3;
 
     /**
-     * Should a fixed-width constraint be applied to the LOWESS smoother?
-     * This forces each window to be a minimum width (see `FitVarianceTrendOptions::minimum_width`) and avoids problems with large differences in density.
+     * Should a minimum width constraint be applied to the LOWESS smoother?
+     * This forces each window to be a minimum width (see `FitVarianceTrendOptions::minimum_width`)
+     * to avoid overfitting from very small windows in high-density intervals.
      * For example, the default smoother performs poorly at high abundances where there are few genes.
      */
     bool use_minimum_width = false;
 
     /**
-     * Width of the window to use when `FitVarianceTrendOptions::use_minimum_width = true`.
-     * This should be relative to the range of `mean` values in `fit_variance_trend()`;
+     * Minimum width of the window to use when `FitVarianceTrendOptions::use_minimum_width = true`.
+     * This should be appropriate for the range of `mean` values used in `fit_variance_trend()`;
      * the default value is chosen based on the typical range in single-cell RNA-seq data.
      */
     double minimum_width = 1;
 
     /**
      * Minimum number of observations in each window when `FitVarianceTrendOptions::use_minimum_width = true`.
-     * This ensures that each window contains at least a given number of observations;
-     * if it does not, it is extended using the standard LOWESS logic until the minimum number is achieved.
+     * This ensures that each window contains at least a given number of observations for a good fit.
+     * If the minimum width window contains fewer observations, it is extended using the standard LOWESS logic until the minimum number is achieved.
      */
     int minimum_window_count = 200;
 
     /**
      * Number of threads to use in the LOWESS fit.
+     * The parallelization scheme is defined by `WeightedLowess::parallelize()`.
      */
     int num_threads = 1;
 };

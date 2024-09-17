@@ -28,14 +28,14 @@ struct ModelGeneVariancesOptions {
     FitVarianceTrendOptions fit_variance_trend_options;
 
     /**
-     * Weighting policy to use for averaging statistics across blocks.
-     * Only relevant for `model_gene_variances_blocked()` overloads where averaged outputs are requested.
+     * Policy to use for weighting the contribution from each block when computing the average for each statistic.
+     * Only relevant to `model_gene_variances_blocked()` overloads where averaged outputs are requested.
      */
     scran_blocks::WeightPolicy block_weight_policy = scran_blocks::WeightPolicy::VARIABLE;
 
     /**
      * Parameters for the variable block weights.
-     * Only relevant for `model_gene_variances_blocked()` overloads where averaged outputs are requested
+     * Only relevant to `model_gene_variances_blocked()` overloads where averaged outputs are requested
      * and `ModelGeneVariancesOptions::block_weight_policy = scran_blocks::WeightPolicy::VARIABLE`.
      */
     scran_blocks::VariableWeightParameters variable_block_weight_parameters; 
@@ -48,6 +48,7 @@ struct ModelGeneVariancesOptions {
 
     /**
      * Number of threads to use. 
+     * The parallelization scheme is defined by `tatami::parallelize()` and `FitVarianceTrendOptions::num_threads`.
      */
     int num_threads = 1;
 };
@@ -57,7 +58,7 @@ struct ModelGeneVariancesOptions {
  * @tparam Stat_ Floating-point type for the output statistics.
  *
  * In general, the pointers in this class should _not_ be set to `NULL`.
- * The only exception is for `ModelGeneVariancesBlockedBuffers::average`,
+ * The only exception is for instances of this class that are used as `ModelGeneVariancesBlockedBuffers::average`,
  * where setting the pointer to `NULL` will omit calculation of the corresponding average statistic.
  */
 template<typename Stat_>
@@ -189,7 +190,7 @@ void compute_variances_dense_row(
     auto nblocks = block_size.size();
     auto NR = mat.nrow(), NC = mat.ncol();
 
-    tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
+    tatami::parallelize([&](int, Index_ start, Index_ length) -> void {
         std::vector<Stat_> tmp_means(blocked ? nblocks : 0);
         std::vector<Stat_> tmp_vars(blocked ? nblocks : 0);
 
@@ -235,7 +236,7 @@ void compute_variances_sparse_row(
     auto nblocks = block_size.size();
     auto NR = mat.nrow(), NC = mat.ncol();
 
-    tatami::parallelize([&](size_t, Index_ start, Index_ length) -> void {
+    tatami::parallelize([&](int, Index_ start, Index_ length) -> void {
         std::vector<Stat_> tmp_means(nblocks);
         std::vector<Stat_> tmp_vars(nblocks);
         std::vector<Index_> tmp_nzero(nblocks);
@@ -288,7 +289,7 @@ void compute_variances_dense_column(
     auto nblocks = block_size.size();
     auto NR = mat.nrow(), NC = mat.ncol();
 
-    tatami::parallelize([&](size_t thread, Index_ start, Index_ length) -> void {
+    tatami::parallelize([&](int thread, Index_ start, Index_ length) -> void {
         std::vector<Value_> buffer(length);
         auto ext = tatami::consecutive_extractor<false>(&mat, false, 0, NC, start, length);
 
@@ -338,7 +339,7 @@ void compute_variances_sparse_column(
     auto NR = mat.nrow(), NC = mat.ncol();
     std::vector<std::vector<Index_> > nonzeros(nblocks, std::vector<Index_>(NR));
 
-    tatami::parallelize([&](size_t thread, Index_ start, Index_ length) -> void {
+    tatami::parallelize([&](int thread, Index_ start, Index_ length) -> void {
         std::vector<Value_> vbuffer(length);
         std::vector<Index_> ibuffer(length);
         tatami::Options opt;
@@ -437,7 +438,8 @@ void compute_average(
 
 /** 
  * Compute and model the per-feature variances from a log-expression matrix with blocking.
- * The mean and variance of each gene is computed separately for all cells in each block, and a separate trend is fitted to each block to obtain residuals (see `model_gene_variances()`).
+ * The mean and variance of each gene is computed separately for all cells in each block, 
+ * and a separate trend is fitted to each block to obtain residuals (see `model_gene_variances()`).
  * This ensures that sample and batch effects do not confound the variance estimates.
  *
  * We also compute the average of each statistic across blocks, using the weighting strategy specified in `ModelGeneVariancesOptions::block_weight_policy`.
@@ -522,10 +524,10 @@ void model_gene_variances_blocked(
 
 /** 
  * Here, we scan through a log-transformed normalized expression matrix and compute per-gene means and variances.
- * We then fits a trend to the variances with respect to the means using `fit_variance_trend()`.
+ * We then fit a trend to the variances with respect to the means using `fit_variance_trend()`.
  * We assume that most genes at any given abundance are not highly variable, such that the fitted value of the trend is interpreted as the "uninteresting" variance - 
  * this is mostly attributed to technical variation like sequencing noise, but can also represent constitutive biological noise like transcriptional bursting.
- * Under this assumption, the residual can be treated as a quantification of biologically interesting variation, and can be used to identify relevant features for downstream analyses.
+ * Under this assumption, the residual can be treated as a measure of biologically interesting variation, and can be used to identify relevant features for downstream analyses.
  *
  * @tparam Value_ Data type of the matrix.
  * @tparam Index_ Integer type for the row/column indices.
