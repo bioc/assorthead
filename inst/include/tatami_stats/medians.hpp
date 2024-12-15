@@ -109,7 +109,9 @@ Output_ direct(Value_* ptr, Index_ num, bool skip_nan) {
     // immediately before 'halfway' in the sort order, we just need to find the
     // maximum from '[0, halfway)'.
     Output_ other = *std::max_element(ptr, ptr + halfway);
-    return (medtmp + other)/2;
+
+    // Avoid FP overflow, preserve exactness of the median if medtmp == other.
+    return medtmp + (other - medtmp)/2;
 }
 
 /**
@@ -180,15 +182,16 @@ Output_ direct(Value_* value, Index_ num_nonzero, Index_ num_all, bool skip_nan)
         }
     }
 
-    Output_ tmp = 0;
+    Output_ baseline = 0, other = 0;
     if (num_negative > halfway) { // both halves of the median are negative.
         std::nth_element(value, value + halfway, value + num_nonzero);
-        tmp = value[halfway] + *(std::max_element(value, value + halfway)); // max_element gets the sorted value at halfway - 1, see explanation for the dense case.
+        baseline = value[halfway];
+        other = *(std::max_element(value, value + halfway)); // max_element gets the sorted value at halfway - 1, see explanation for the dense case.
 
     } else if (num_negative == halfway) { // the upper half is guaranteed to be zero.
         size_t below_halfway = halfway - 1;
         std::nth_element(value, value + below_halfway, value + num_nonzero);
-        tmp = value[below_halfway];
+        other = value[below_halfway]; // set to other so that addition/subtraction of a zero baseline has no effect on precision. 
 
     } else if (num_negative < halfway && num_negative + num_zero > halfway) { // both halves are zero, so zero is the median.
         ;
@@ -196,15 +199,17 @@ Output_ direct(Value_* value, Index_ num_nonzero, Index_ num_all, bool skip_nan)
     } else if (num_negative + num_zero == halfway) { // the lower half is guaranteed to be zero.
         size_t skip_zeros = halfway - num_zero;
         std::nth_element(value, value + skip_zeros, value + num_nonzero);
-        tmp = value[skip_zeros];
+        other = value[skip_zeros]; // set to other so that addition/subtraction of a zero baseline has no effect on precision. 
 
     } else { // both halves of the median are non-negative.
         size_t skip_zeros = halfway - num_zero;
         std::nth_element(value, value + skip_zeros, value + num_nonzero);
-        tmp = value[skip_zeros] + *(std::max_element(value, value + skip_zeros)); // max_element gets the sorted value at skip_zeros - 1, see explanation for the dense case.
+        baseline = value[skip_zeros];
+        other = *(std::max_element(value, value + skip_zeros)); // max_element gets the sorted value at skip_zeros - 1, see explanation for the dense case.
     }
 
-    return tmp / 2;
+    // Avoid FP overflow, preserve exactness of the median if baseline == other.
+    return baseline + (other - baseline) / 2;
 }
 
 /**

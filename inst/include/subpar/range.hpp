@@ -51,13 +51,13 @@ bool ge(int num_workers, Task_ num_tasks) { // We already assume that both of th
  * This should be a non-negative integer.
  *
  * @return A more suitable number of workers.
- * Negative or zero `num_workers` are treated as 1.
+ * Negative or zero `num_workers` are converted to 1 if `num_tasks > 0`, otherwise zero.
  * If `num_workers` is greater than `num_tasks`, the former is set to the latter.
  */
 template<typename Task_>
 int sanitize_num_workers(int num_workers, Task_ num_tasks) {
     if (num_workers <= 0) {
-        return 1;
+        return (num_tasks > 0);
     }
 
     if (internal::ge(num_workers, num_tasks)) {
@@ -79,13 +79,21 @@ int sanitize_num_workers(int num_workers, Task_ num_tasks) {
  * This is occasionally useful when OpenMP cannot be used in some parts of the application, e.g., with POSIX forks.
  *
  * Advanced users can substitute in their own parallelization scheme by defining `SUBPAR_CUSTOM_PARALLELIZE_RANGE` before including the **subpar** header.
- * This should be a function-like macro accept the same arguments as `parallelize_range()` and will be used instead of the default scheme whenever `parallelize_range()` is called.
+ * This should be a function-like macro that accepts the same arguments as `parallelize_range()` or the name of a function that accepts the same arguments as `parallelize_range()`.
+ * If defined, the custom scheme will be used instead of the default scheme whenever `parallelize_range()` is called.
  * Macro authors should note the expectations on `run_task_range()`.
  *
  * If `nothrow_ = true`, exception handling is omitted from the default parallelization scheme.
  * This avoids some unnecessary work when the caller knows that `run_task_range()` will never throw. 
  * For custom schemes, if `SUBPAR_CUSTOM_PARALLELIZE_RANGE_NOTHROW` is defined, it will be used if `nothrow_ = true`;
  * otherwise, `SUBPAR_CUSTOM_PARALLELIZE_RANGE` will continue to be used.
+ *
+ * It is worth stressing that `run_task_range()` may be called multiple times in the same worker, i.e., with the same `w` but different `start` and `length` (not necessarily contiguous).
+ * Any use of `w` by `run_task_range()` should be robust to any number of previous calls with the same `w`.
+ * For example, if `w` is used to store thread-specific results for use outside `parallelize_range()`,
+ * the results should be accumulated in a manner that preserves the results of previous calls. 
+ * If the code must be run exactly once per worker, consider using `parallelize_simple()` instead.
+ * Developers may also consider using `silly_parallelize_range()` for testing for correct use of `w`.
  *
  * @tparam nothrow_ Whether the `Run_` function cannot throw an exception.
  * @tparam Task_ Integer type for the number of tasks.
@@ -109,9 +117,10 @@ int sanitize_num_workers(int num_workers, Task_ num_tasks) {
  * This may be called zero, one or multiple times in any particular worker.
  * In each call:
  * - `w` is guaranteed to be in `[0, num_workers)`.
- * - `[start, start + length)` is guaranteed to be a valid and non-empty range of tasks that does not overlap with any other range in any other call to `run_task_range()`.
+ * - `[start, start + length)` is guaranteed to be a non-empty range of tasks that lies in `[0, num_tasks)`.
+ *   It will not overlap with any other range in any other call to `run_task_range()`.
  * .
- * This function may throw an exception.
+ * This function may throw an exception if `nothrow_ = false`.
  */
 template<bool nothrow_ = false, typename Task_, class Run_>
 void parallelize_range(int num_workers, Task_ num_tasks, Run_ run_task_range) {
@@ -226,7 +235,6 @@ void parallelize(int num_workers, Task_ num_tasks, Run_ run_task_range) {
 /**
  * @endcond
  */
-
 
 }
 
