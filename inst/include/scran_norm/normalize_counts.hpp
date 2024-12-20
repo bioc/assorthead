@@ -50,15 +50,17 @@ struct NormalizeCountsOptions {
 
 /**
  * Given a count matrix and a set of size factors, compute log-transformed normalized expression values.
- * Each cell's counts are divided by the cell's size factor, to account for differences in capture efficiency and sequencing depth across cells.
- * The normalized values are then log-transformed so that downstream analyses focus on the relative rather than absolute differences in expression;
- * this process also provides some measure of variance stabilization.
- * These operations are done in a delayed manner using the `tatami::DelayedUnaryIsometricOperation` class.
+ * All operations are done in a delayed manner using the `tatami::DelayedUnaryIsometricOperation` class.
  *
+ * For normalization, each cell's counts are divided by the cell's size factor to remove uninteresting scaling differences.
  * The simplest and most common method for defining size factors is to use the centered library sizes, see `center_size_factors()` for details.
- * This removes scaling biases caused by sequencing depth, etc. between cells,
- * while the centering preserves the scale of the counts in the (log-)normalized expression values.
+ * This removes scaling biases caused by sequencing depth, capture efficiency etc. between cells,
+ * while the centering preserves the scale of the counts in the normalized expression values.
  * That said, users can define size factors from any method of their choice (e.g., median-based normalization, TMM) as long as they are positive for all cells.
+ *
+ * Normalized values are then log-transformed so that differences in log-values represent log-fold changes in expression.
+ * This ensures that downstream analyses like t-tests and distance calculations focus on relative fold-changes rather than absolute differences.
+ * The log-transformation also provides some measure of variance stabilization so that the downstream analyses are not dominated by sampling noise at large counts.
  *
  * @tparam OutputValue_ Floating-point type for the output matrix.
  * @tparam InputValue_ Data type for the input matrix.
@@ -66,7 +68,8 @@ struct NormalizeCountsOptions {
  * @tparam SizeFactors_ Container of floats for the size factors.
  * This should have the `size()`, `begin()`, `end()` and `operator[]` methods.
  *
- * @param counts Pointer to a `tatami::Matrix` of gene-by-cell counts.
+ * @param counts Pointer to a `tatami::Matrix` containing counts.
+ * Rows should correspond to genes while columns should correspond to cells.
  * @param size_factors Vector of length equal to the number of columns in `counts`, containing the size factor for each cell.
  * All values should be positive. 
  * @param options Further options.
@@ -89,6 +92,10 @@ std::shared_ptr<tatami::Matrix<OutputValue_, Index_> > normalize_counts(
     }
 
     static_assert(std::is_floating_point<OutputValue_>::value);
+    if (static_cast<size_t>(size_factors.size()) != static_cast<size_t>(counts->ncol())) {
+        throw std::runtime_error("length of 'size_factors' should be equal to the number of columns of 'counts'");
+    }
+
     auto div = tatami::make_DelayedUnaryIsometricOperation<OutputValue_>(
         std::move(counts), 
         tatami::make_DelayedUnaryIsometricDivideVector<true, InputValue_, SizeFactors_>(

@@ -56,10 +56,10 @@ Float_ find_quantile(Float_ quantile, size_t n, Float_* ptr) {
  */
 
 /**
- * Choose pseudo-count for log-transformation (see `NormalizeCountsOptions::pseudo_count`) that aims to control the transformation-induced bias.
- * Specifically, the log-transform can introduce spurious differences in the expected log-normalized expression between cells with very different size factors.
+ * Choose a pseudo-count for log-transformation (see `NormalizeCountsOptions::pseudo_count`) that aims to control the transformation-induced bias.
+ * Specifically, the log-transform can introduce spurious differences in the expected log-normalized expression between cells with very different size factors (Lun, 2018).
  * This bias can be mitigated by increasing the pseudo-count, which effectively shrinks all log-expression values towards the zero-expression baseline.
- * The increased shrinkage is strongest at low counts where the log-transform bias is most pronounced, while the transformation of large counts is mostly unaffected.
+ * The increased shrinkage is strongest at low counts where the transformation bias is most pronounced, while large counts are mostly unaffected.
  *
  * In practice, the log-transformation bias is modest in datasets where there are stronger sources of variation.
  * When observed, it manifests as a library size-dependent trend in the log-normalized expression values.
@@ -72,7 +72,7 @@ Float_ find_quantile(Float_ quantile, size_t n, Float_* ptr) {
  *
  * @see
  * Lun ATL (2018).
- * Overcoming systematic errors caused by log-transformation of normalized single-cell RNA sequencing data
+ * Overcoming systematic errors caused by log-transformation of normalized single-cell RNA sequencing data.
  * _biorXiv_ doi:10.1101/404962
  *
  * @param num Number of size factors.
