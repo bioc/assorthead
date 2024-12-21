@@ -291,7 +291,7 @@ void compute_variances_dense_column(
 
     tatami::parallelize([&](int thread, Index_ start, Index_ length) -> void {
         std::vector<Value_> buffer(length);
-        auto ext = tatami::consecutive_extractor<false>(&mat, false, 0, NC, start, length);
+        auto ext = tatami::consecutive_extractor<false>(&mat, false, static_cast<Index_>(0), NC, start, length);
 
         std::vector<tatami_stats::LocalOutputBuffer<Stat_> > local_var_output;
         local_var_output.reserve(nblocks);
@@ -344,7 +344,7 @@ void compute_variances_sparse_column(
         std::vector<Index_> ibuffer(length);
         tatami::Options opt;
         opt.sparse_ordered_index = false;
-        auto ext = tatami::consecutive_extractor<true>(&mat, false, 0, NC, start, length, opt);
+        auto ext = tatami::consecutive_extractor<true>(&mat, false, static_cast<Index_>(0), NC, start, length, opt);
 
         std::vector<tatami_stats::LocalOutputBuffer<Stat_> > local_var_output;
         local_var_output.reserve(nblocks);
@@ -505,19 +505,19 @@ void model_gene_variances_blocked(
         tmp_weights.reserve(nblocks);
 
         internal::compute_average(NR, buffers.per_block, block_size, block_weight,
-            /* min_size = */ 1,  // skip blocks without enough cells to compute the mean.
+            /* min_size = */ static_cast<Index_>(1),  // skip blocks without enough cells to compute the mean.
             [](const auto& x) -> Stat_* { return x.means; }, tmp_pointers, tmp_weights, ave_means);
 
         internal::compute_average(NR, buffers.per_block, block_size, block_weight,
-            /* min_size = */ 2, // skip blocks without enough cells to compute the variance.
+            /* min_size = */ static_cast<Index_>(2), // skip blocks without enough cells to compute the variance.
             [](const auto& x) -> Stat_* { return x.variances; }, tmp_pointers, tmp_weights, ave_variances);
 
         internal::compute_average(NR, buffers.per_block, block_size, block_weight, 
-            /* min_size = */ 2, // ditto.
+            /* min_size = */ static_cast<Index_>(2), // ditto.
             [](const auto& x) -> Stat_* { return x.fitted; }, tmp_pointers, tmp_weights, ave_fitted);
 
         internal::compute_average(NR, buffers.per_block, block_size, block_weight, 
-            /* min_size = */ 2, // ditto.
+            /* min_size = */ static_cast<Index_>(2), // ditto.
             [](const auto& x) -> Stat_* { return x.residuals; }, tmp_pointers, tmp_weights, ave_residuals);
     }
 }
