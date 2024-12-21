@@ -8,6 +8,8 @@
 
 #include <vector>
 #include <cmath>
+#include <algorithm>
+#include <type_traits>
 
 #include "scran_blocks/scran_blocks.hpp"
 #include "utils.hpp"
@@ -79,6 +81,7 @@ struct BlockedPcaOptions {
 
     /**
      * Number of threads to use.
+     * The parallelization scheme is determined by `tatami::parallelize()` and `irlba::parallelize()`.
      */
     int num_threads = 1;
 
@@ -508,15 +511,7 @@ inline void project_matrix_realized_sparse(
     } else {
         const auto& row_nonzero_starts = emat.get_secondary_nonzero_starts();
 
-#ifndef IRLBA_CUSTOM_PARALLEL
-#ifdef _OPENMP
-        #pragma omp parallel for num_threads(nthreads)
-#endif
-        for (int t = 0; t < nthreads; ++t) {
-#else
-        IRLBA_CUSTOM_PARALLEL(nthreads, [&](size_t t) -> void { 
-#endif
-
+        irlba::parallelize(nthreads, [&](size_t t) -> void { 
             const auto& starts = row_nonzero_starts[t];
             const auto& ends = row_nonzero_starts[t + 1];
             Eigen::VectorXd multipliers(rank);
@@ -528,17 +523,12 @@ inline void project_matrix_realized_sparse(
                     components.col(i[s]).noalias() += x[s] * multipliers;
                 }
             }
-
-#ifndef IRLBA_CUSTOM_PARALLEL
-        }
-#else
         });
-#endif
     }
 }
 
 template<typename Value_, typename Index_, class EigenMatrix_>
-inline void project_matrix_transposed_tatami(
+void project_matrix_transposed_tatami(
     const tatami::Matrix<Value_, Index_>& mat, // genes in rows, cells in columns
     EigenMatrix_& components,
     const EigenMatrix_& scaled_rotation, // genes in rows, dims in columns
@@ -762,7 +752,8 @@ void run_blocked(
     EigenVector_& variance_explained, 
     EigenMatrix_& center_m,
     EigenVector_& scale_v,
-    typename EigenVector_::Scalar& total_var) 
+    typename EigenVector_::Scalar& total_var,
+    bool& converged)
 {
     Index_ ngenes = mat.nrow(), ncells = mat.ncol(); 
 
@@ -802,10 +793,12 @@ void run_blocked(
         if (options.scale) {
             irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
             irlba::Scaled<false, decltype(scaled), EigenVector_> weighted(scaled, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
+            auto out = irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
+            converged = out.first;
         } else {
             irlba::Scaled<false, decltype(centered), EigenVector_> weighted(centered, block_details.expanded_weights, /* divide = */ false);
-            irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
+            auto out = irlba::compute(weighted, options.number, components, rotation, variance_explained, options.irlba_options);
+            converged = out.first;
         }
 
         EigenMatrix_ tmp;
@@ -836,9 +829,11 @@ void run_blocked(
     } else {
         if (options.scale) {
             irlba::Scaled<true, decltype(centered), EigenVector_> scaled(centered, scale_v, /* divide = */ true);
-            irlba::compute(scaled, options.number, components, rotation, variance_explained, options.irlba_options);
+            auto out = irlba::compute(scaled, options.number, components, rotation, variance_explained, options.irlba_options);
+            converged = out.first;
         } else {
-            irlba::compute(centered, options.number, components, rotation, variance_explained, options.irlba_options);
+            auto out = irlba::compute(centered, options.number, components, rotation, variance_explained, options.irlba_options);
+            converged = out.first;
         }
 
         if (options.components_from_residuals) {
@@ -920,10 +915,16 @@ struct BlockedPcaResults {
      * Each entry corresponds to a row in the input matrix and contains the scaling factor used to divide that gene's values if `BlockedPcaOptions::scale = true`.
      */
     EigenVector_ scale;
+
+    /**
+     * Whether the algorithm converged.
+     */
+    bool converged = false;
 };
 
 /**
- * In the presence of a blocking factor (e.g., batches, samples), we want to ensure that the PCA is not driven by uninteresting differences between blocks.
+ * As mentioned in `simple_pca()`, it is desirable to obtain the top PCs for downstream cell-based analyses.
+ * However, in the presence of a blocking factor (e.g., batches, samples), we want to ensure that the PCA is not driven by uninteresting differences between blocks.
  * To achieve this, `blocked_pca()` centers the expression of each gene in each blocking level and uses the residuals for PCA.
  * The gene-gene covariance matrix will thus focus on variation within each batch, 
  * ensuring that the top rotation vectors/principal components capture biological heterogeneity instead of inter-block differences.
@@ -938,8 +939,8 @@ struct BlockedPcaResults {
  * Some of these methods accept a low-dimensional embedding of cells as input, which can be created by `blocked_pca()` with `BlockedPcaOptions::components_from_residuals = false`.
  * In this mode, only the rotation vectors are computed from the residuals.
  * The original expression values for each cell are then projected onto the associated subspace to obtain PC coordinates that can be used for further batch correction.
- * This approach aims to preserve the benefits of blocking to focus on intra-block biology instead of inter-block differences,
- * without making strong assumptions about the nature of those differences.
+ * This approach aims to avoid any strong assumptions about the nature of inter-block differences,
+ * while still leveraging the benefits of blocking to focus on intra-block biology.
  *
  * If one batch has many more cells than the others, it will dominate the PCA by driving the axes of maximum variance. 
  * This may mask interesting aspects of variation in the smaller batches.
@@ -954,8 +955,9 @@ struct BlockedPcaResults {
  * @tparam EigenMatrix_ A floating-point `Eigen::Matrix` class.
  * @tparam EigenVector_ A floating-point `Eigen::Vector` class.
  *
- * @param[in] mat Input expression matrix.
+ * @param[in] mat Input matrix.
  * Columns should contain cells while rows should contain genes.
+ * Matrix entries are typically log-expression values.
  * @param[in] block Pointer to an array of length equal to the number of cells, 
  * containing the block assignment for each cell. 
  * Each assignment should be an integer in \f$[0, N)\f$ where \f$N\f$ is the number of blocks.
@@ -974,18 +976,19 @@ void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block,
     EigenMatrix_& center_m = output.center;
     EigenVector_& scale_v = output.scale;
     auto& total_var = output.total_variance;
+    bool& converged = output.converged;
 
     if (mat.sparse()) {
         if (options.realize_matrix) {
-            internal::run_blocked<true, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<true, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var, converged);
         } else {
-            internal::run_blocked<false, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<false, true>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var, converged);
         }
     } else {
         if (options.realize_matrix) {
-            internal::run_blocked<true, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<true, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var, converged);
         } else {
-            internal::run_blocked<false, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var);
+            internal::run_blocked<false, false>(mat, block, bdetails, options, components, rotation, variance_explained, center_m, scale_v, total_var, converged);
         }
     }
 
@@ -1003,8 +1006,9 @@ void blocked_pca(const tatami::Matrix<Value_, Index_>& mat, const Block_* block,
  * @tparam Index_ Integer type for the indices.
  * @tparam Block_ Integer type for the blocking factor.
  *
- * @param[in] mat Input expression matrix.
+ * @param[in] mat Input matrix.
  * Columns should contain cells while rows should contain genes.
+ * Matrix entries are typically log-expression values.
  * @param[in] block Pointer to an array of length equal to the number of cells, 
  * containing the block assignment for each cell. 
  * Each assignment should be an integer in \f$[0, N)\f$ where \f$N\f$ is the number of blocks.
