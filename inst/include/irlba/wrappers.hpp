@@ -220,23 +220,32 @@ public:
     Eigen::Index cols() const { return my_matrix.cols(); }
 
 public:
-    typedef WrappedWorkspace<Matrix_> Workspace;
+    struct Workspace {
+        Workspace(WrappedWorkspace<Matrix_> i) : inner(std::move(i)) {}
+        WrappedWorkspace<Matrix_> inner;
+        EigenVector_ buffer;
+    };
 
     Workspace workspace() const {
-        return wrapped_workspace(my_matrix);
+        return Workspace(wrapped_workspace(my_matrix));
     }
 
-    typedef WrappedAdjointWorkspace<Matrix_> AdjointWorkspace;
+    struct AdjointWorkspace {
+        AdjointWorkspace(WrappedAdjointWorkspace<Matrix_> i) : inner(std::move(i)) {}
+        WrappedAdjointWorkspace<Matrix_> inner;
+        EigenVector_ buffer;
+    };
 
     AdjointWorkspace adjoint_workspace() const {
-        return wrapped_adjoint_workspace(my_matrix);
+        return AdjointWorkspace(wrapped_adjoint_workspace(my_matrix));
     }
 
 public:
     template<class Right_>
     void multiply(const Right_& rhs, Workspace& work, EigenVector_& out) const {
-        wrapped_multiply(my_matrix, rhs, work, out);
-        auto beta = rhs.dot(my_center);
+        const auto& realized_rhs = internal::realize_rhs(rhs, work.buffer);
+        wrapped_multiply(my_matrix, realized_rhs, work.inner, out);
+        auto beta = realized_rhs.dot(my_center);
         for (auto& o : out) {
             o -= beta;
         }
@@ -245,8 +254,9 @@ public:
 
     template<class Right_>
     void adjoint_multiply(const Right_& rhs, AdjointWorkspace& work, EigenVector_& out) const {
-        wrapped_adjoint_multiply(my_matrix, rhs, work, out);
-        auto beta = rhs.sum();
+        const auto& realized_rhs = internal::realize_rhs(rhs, work.buffer);
+        wrapped_adjoint_multiply(my_matrix, realized_rhs, work.inner, out);
+        auto beta = realized_rhs.sum();
         out -= beta * (my_center);
         return;
     }
@@ -254,12 +264,7 @@ public:
     template<class EigenMatrix_>
     Eigen::MatrixXd realize() const {
         auto output = wrapped_realize<EigenMatrix_>(my_matrix);
-        auto nc = output.cols(), nr = output.rows();
-        for (Eigen::Index c = 0; c < nc; ++c) {
-            for (Eigen::Index r = 0; r < nr; ++r) {
-                output(r, c) -= my_center[c];
-            }
-        }
+        output.array().rowwise() -= my_center.adjoint().array();
         return output;
     }
     /**
@@ -381,35 +386,18 @@ public:
     template<class EigenMatrix_>
     EigenMatrix_ realize() const {
         auto output = wrapped_realize<EigenMatrix_>(my_matrix);
-        auto nc = output.cols(), nr = output.rows();
 
         if constexpr(column_) {
             if (my_divide) {
-                for (Eigen::Index c = 0; c < nc; ++c) {
-                    for (Eigen::Index r = 0; r < nr; ++r) {
-                        output(r, c) /= my_scale[c];
-                    }
-                }
+                output.array().rowwise() /= my_scale.adjoint().array();
             } else {
-                for (Eigen::Index c = 0; c < nc; ++c) {
-                    for (Eigen::Index r = 0; r < nr; ++r) {
-                        output(r, c) *= my_scale[c];
-                    }
-                }
+                output.array().rowwise() *= my_scale.adjoint().array();
             }
         } else {
             if (my_divide) {
-                for (Eigen::Index c = 0; c < nc; ++c) {
-                    for (Eigen::Index r = 0; r < nr; ++r) {
-                        output(r, c) /= my_scale[r];
-                    }
-                }
+                output.array().colwise() /= my_scale.array();
             } else {
-                for (Eigen::Index c = 0; c < nc; ++c) {
-                    for (Eigen::Index r = 0; r < nr; ++r) {
-                        output(r, c) *= my_scale[r];
-                    }
-                }
+                output.array().colwise() *= my_scale.array();
             }
         }
 
