@@ -48,7 +48,7 @@ struct ClusterLeidenOptions {
     /**
      * Whether to report the quality of the clustering in `Results::quality`.
      */
-    bool report_quality = false;
+    bool report_quality = true;
 
     /**
      * Seed for the **igraph** random number generator.
@@ -85,6 +85,7 @@ struct ClusterLeidenResults {
  * @param graph An existing graph.
  * @param weights Pointer to an array of weights of length equal to the number of edges in `graph`. 
  * This should be in the same order as the edge list in `graph`.
+ * Alternatively `NULL`, if the graph is unweighted.
  * @param options Further options.
  * @param[out] output On output, this is filtered with the clustering results.
  * The input value is ignored, so this object can be re-used across multiple calls to `cluster_leiden()`.
@@ -114,7 +115,7 @@ inline void cluster_leiden(const igraph_t* graph, const igraph_vector_t* weights
         raiigraph::RealVector strengths(igraph_vcount(graph));
         igraph_strength(graph, strengths, igraph_vss_all(), IGRAPH_ALL, 1, weights);
 
-        double total_weights = igraph_vector_sum(weights);
+        double total_weights = igraph_vector_sum(strengths);
         double mod_resolution = options.resolution / total_weights;
 
         output.status = igraph_community_leiden(

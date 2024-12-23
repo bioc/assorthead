@@ -74,6 +74,7 @@ struct ClusterWalktrapResults {
  * @param graph An existing graph.
  * @param weights Pointer to an array of weights of length equal to the number of edges in `graph`. 
  * This should be in the same order as the edge list in `graph`.
+ * Alternatively `NULL`, if the graph is unweighted.
  * @param options Further options.
  * @param[out] output On output, this is filtered with the clustering results.
  * The input value is ignored, so this object can be re-used across multiple calls to `cluster_walktrap()`.
