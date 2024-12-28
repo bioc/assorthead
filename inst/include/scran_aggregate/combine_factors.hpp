@@ -5,6 +5,9 @@
 #include <vector>
 #include <map>
 #include <unordered_map>
+#include <typeindex>
+
+#include "clean_factor.hpp"
 
 /**
  * @file combine_factors.hpp
@@ -35,59 +38,83 @@ namespace scran_aggregate {
  */
 template<typename Factor_, typename Combined_>
 std::vector<std::vector<Factor_> > combine_factors(size_t n, const std::vector<const Factor_*>& factors, Combined_* combined) {
-    // Using a map with a custom comparator that uses the index
-    // of first occurrence of each factor as the key. Currently using a map
-    // to (i) avoid issues with collisions of combined hashes and (ii)
-    // avoid having to write more code for sorting a vector of arrays.
-    auto cmp = [&](size_t left, size_t right) -> bool {
-        for (auto curf : factors) {
-            if (curf[left] < curf[right]) {
-                return true;
-            } else if (curf[left] > curf[right]) {
-                return false;
-            }
-        }
-        return false;
-    };
-
-    auto eq = [&](size_t left, size_t right) -> bool {
-        for (auto curf : factors) {
-            if (curf[left] != curf[right]) {
-                return false;
-            }
-        }
-        return true;
-    };
-
-    std::map<size_t, Combined_, decltype(cmp)> mapping(cmp);
-    for (size_t i = 0; i < n; ++i) {
-        auto mIt = mapping.find(i);
-        if (mIt == mapping.end() || !eq(i, mIt->first)) {
-            mapping.insert(mIt, std::pair<size_t, Combined_>(i, 0));
-        }
-    }
-
-    // Obtaining the sorted set of unique combinations; easy to do for a
-    // map because it's already sorted!
     size_t nfac = factors.size();
     std::vector<std::vector<Factor_> > output(nfac);
-    size_t nuniq = mapping.size();
+
+    // Handling the special cases.
+    if (nfac == 0) {
+        std::fill_n(combined, n, 0);
+        return output;
+    }
+    if (nfac == 1) {
+        output[0] = clean_factor(n, factors.front(), combined);
+        return output;
+    }
+
+    // Creating a hashmap on the combinations of each factor.
+    struct Combination {
+        Combination(size_t i) : index(i) {}
+        size_t index;
+    };
+
+    auto unique = [&]{ // scoping this in an IIFE to release map memory sooner.
+        // Using a map with a custom comparator that uses the index
+        // of first occurrence of each factor as the key. Currently using a map
+        // to (i) avoid issues with collisions of combined hashes and (ii)
+        // avoid having to write more code for sorting a vector of arrays.
+        auto cmp = [&](const Combination& left, const Combination& right) -> bool {
+            for (auto curf : factors) {
+                if (curf[left.index] < curf[right.index]) {
+                    return true;
+                } else if (curf[left.index] > curf[right.index]) {
+                    return false;
+                }
+            }
+            return false;
+        };
+
+        auto eq = [&](const Combination& left, const Combination& right) -> bool {
+            for (auto curf : factors) {
+                if (curf[left.index] != curf[right.index]) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        std::map<Combination, Combined_, decltype(cmp)> mapping(std::move(cmp));
+        for (size_t i = 0; i < n; ++i) {
+            Combination current(i);
+            auto mIt = mapping.find(current);
+            if (mIt == mapping.end() || !eq(mIt->first, current)) {
+                Combined_ alt = mapping.size();
+                mapping.insert(mIt, std::make_pair(current, alt));
+                combined[i] = alt;
+            } else {
+                combined[i] = mIt->second;
+            }
+        }
+
+        return std::vector<std::pair<Combination, Combined_> >(mapping.begin(), mapping.end());
+    }();
+
+    // Remapping to a sorted set.
+    size_t nuniq = unique.size();
     for (auto& ofac : output) {
         ofac.reserve(nuniq);
     }
-
-    auto mIt = mapping.begin();
-    for (size_t u = 0; u < nuniq; ++u, ++mIt) {
-        auto ix = mIt->first;
+    std::vector<Combined_> remapping(nuniq);
+    for (size_t u = 0; u < nuniq; ++u) {
+        auto ix = unique[u].first.index;
         for (size_t f = 0; f < nfac; ++f) {
             output[f].push_back(factors[f][ix]);
         }
-        mIt->second = u;
+        remapping[unique[u].second] = u;
     }
 
-    // Mapping each cell to its unique combination.
+    // Mapping each cell to its sorted combination.
     for (size_t i = 0; i < n; ++i) {
-        combined[i] = mapping[i];
+        combined[i] = remapping[combined[i]];
     }
 
     return output;
@@ -120,54 +147,56 @@ std::vector<std::vector<Factor_> > combine_factors_unused(size_t n, const std::v
     size_t nfac = factors.size();
     std::vector<std::vector<Factor_> > output(nfac);
 
-    if (nfac > 1) {
-        // We iterate from back to front, where the first factor is the slowest changing.
-        std::copy_n(factors[nfac - 1].first, n, combined); 
-        Combined_ mult = factors[nfac - 1].second;
-        for (size_t f = nfac - 1; f > 0; --f) {
-            const auto& finfo = factors[f - 1];
-            auto ff = finfo.first;
-            for (size_t i = 0; i < n; ++i) {
-                combined[i] += mult * ff[i];
-            }
-            mult *= finfo.second;
-        }
-
-        auto ncombos = mult;
-        Combined_ outer_repeats = mult;
-        Combined_ inner_repeats = 1;
-        for (size_t f = nfac; f > 0; --f) {
-            auto& out = output[f - 1];
-            out.reserve(ncombos);
-
-            const auto& finfo = factors[f - 1];
-            size_t initial_size = inner_repeats * finfo.second;
-            out.resize(initial_size);
-
-            if (inner_repeats == 1) {
-                std::iota(out.begin(), out.end(), static_cast<Combined_>(0));
-            } else {
-                auto oIt = out.begin();
-                for (Number_ l = 0; l < finfo.second; ++l) {
-                    std::fill_n(oIt, inner_repeats, l);
-                    oIt += inner_repeats;
-                }
-            }
-            inner_repeats = initial_size;
-
-            outer_repeats /= finfo.second;
-            for (Combined_ r = 1; r < outer_repeats; ++r) {
-                out.insert(out.end(), out.begin(), out.begin() + initial_size);
-            }
-        }
-
-    } else if (nfac == 1) {
+    // Handling the special cases.
+    if (nfac == 0) {
+        std::fill_n(combined, n, 0);
+        return output;
+    }
+    if (nfac == 1) {
         output[0].resize(factors[0].second);
         std::iota(output[0].begin(), output[0].end(), static_cast<Combined_>(0));
         std::copy_n(factors[0].first, n, combined);
+        return output;
+    }
 
-    } else {
-        std::fill_n(combined, n, 0);
+    // We iterate from back to front, where the first factor is the slowest changing.
+    std::copy_n(factors[nfac - 1].first, n, combined); 
+    Combined_ mult = factors[nfac - 1].second;
+    for (size_t f = nfac - 1; f > 0; --f) {
+        const auto& finfo = factors[f - 1];
+        auto ff = finfo.first;
+        for (size_t i = 0; i < n; ++i) {
+            combined[i] += mult * ff[i];
+        }
+        mult *= finfo.second;
+    }
+
+    auto ncombos = mult;
+    Combined_ outer_repeats = mult;
+    Combined_ inner_repeats = 1;
+    for (size_t f = nfac; f > 0; --f) {
+        auto& out = output[f - 1];
+        out.reserve(ncombos);
+
+        const auto& finfo = factors[f - 1];
+        size_t initial_size = inner_repeats * finfo.second;
+        out.resize(initial_size);
+
+        if (inner_repeats == 1) {
+            std::iota(out.begin(), out.end(), static_cast<Combined_>(0));
+        } else {
+            auto oIt = out.begin();
+            for (Number_ l = 0; l < finfo.second; ++l) {
+                std::fill_n(oIt, inner_repeats, l);
+                oIt += inner_repeats;
+            }
+        }
+        inner_repeats = initial_size;
+
+        outer_repeats /= finfo.second;
+        for (Combined_ r = 1; r < outer_repeats; ++r) {
+            out.insert(out.end(), out.begin(), out.begin() + initial_size);
+        }
     }
 
     return output;

@@ -34,6 +34,7 @@ struct ScoreMarkersPairwiseOptions {
 
     /**
      * Number of threads to use. 
+     * The parallelization scheme is determined by `tatami::parallelize()`.
      */
     int num_threads = 1;
 
@@ -95,12 +96,16 @@ struct ScoreMarkersPairwiseBuffers {
 
     /**
      * Pointer to an array of length equal to \f$GN^2\f$, where \f$G\f$ is the number of genes and \f$N\f$ is the number of groups.
-     * This is a 3-dimensional array to be filled with the Cohen's D for the comparison between each pair of groups for each gene.
+     * This is a 3-dimensional \f$G \times N \times N\f$ array to be filled with the Cohen's D for the comparison between each pair of groups for each gene.
      *
-     * The first dimension is the fastest changing, is of length equal to the number of groups, and represents the first group.
-     * The second dimension is the next fastest changing, is also of length equal to the number of groups, and represents the second group.
-     * The third dimension is the slowest changing, is of length equal to the number of genes, and represents the gene.
-     * Thus, the entry \f$(i, j, k)\f$ represents the effect size of gene \f$k\f$ upon comparing group \f$i\f$ against group \f$j\f$.
+     * The first dimension is the slowest changing, is of length equal to the number of genes, and represents the gene.
+     * The second dimension is the second-fastest changing, is of length equal to the number of groups, and represents the first group.
+     * The third dimension is the fastest changing, is also of length equal to the number of groups, and represents the second group.
+     *
+     * Thus, the entry \f$(i, j, k)\f$ (i.e., `effects[i * N * N + j * N + k]`) represents the effect size of gene \f$i\f$ upon comparing group \f$j\f$ against group \f$k\f$.
+     * Positive values represent upregulation in group \f$j\f$ compared to \f$k\f$.
+     * Note that the comparison of each group to itself is always assigned an effect size of zero, regardless of the `threshold` used in `score_markers_pairwise()`;
+     * this is only done to avoid exposing uninitialized memory, and the value should be ignored in downstream steps.
      *
      * Alternatively NULL, in which case the Cohen's D is not stored.
      */
@@ -110,6 +115,12 @@ struct ScoreMarkersPairwiseBuffers {
      * Pointer to an array of length equal to \f$GN^2\f$, where \f$G\f$ is the number of genes and \f$N\f$ is the number of groups.
      * This is a 3-dimensional array to be filled with the AUC for the comparison between each pair of groups for each gene;
      * see `ScoreMarkersPairwiseBuffers::cohens_d` for more details.
+     *
+     * Unlike Cohen's D, all AUC values will lie in \f$[0, 1]\f$.
+     * Values above 0.5 represent upregulation in group \f$j\f$ compared to \f$k\f$.
+     * The exception to this logic is the comparison of each group to itself, which is always assigned an effect size of zero instead of 0.5;
+     * this is only done to avoid exposing uninitialized memory, and the value should be ignored in downstream steps.
+     *
      * Alternatively NULL, in which case the AUC is not stored.
      */
     Stat_* auc = NULL;
@@ -216,11 +227,11 @@ void process_simple_pairwise_effects(
         const auto* tmp_detected = combo_detected.data() + in_offset;
 
         size_t squared = ngroups * ngroups;
-        size_t out_offset = start * squared;
-        for (size_t gene = start, end = start + length; gene < end; ++gene, out_offset += squared) {
+        for (size_t gene = start, end = start + length; gene < end; ++gene) {
             average_group_stats(gene, ngroups, nblocks, tmp_means, tmp_detected, combo_weights.data(), total_weights_ptr, output.mean, output.detected);
 
             // Computing the effect sizes.
+            size_t out_offset = gene * squared;
             if (output.cohens_d != NULL) {
                 internal::compute_pairwise_cohens_d(tmp_means, tmp_variances, ngroups, nblocks, preweights, threshold, output.cohens_d + out_offset);
             }
