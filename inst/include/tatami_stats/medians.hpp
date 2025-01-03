@@ -110,8 +110,11 @@ Output_ direct(Value_* ptr, Index_ num, bool skip_nan) {
     // maximum from '[0, halfway)'.
     Output_ other = *std::max_element(ptr, ptr + halfway);
 
-    // Avoid FP overflow, preserve exactness of the median if medtmp == other.
-    return medtmp + (other - medtmp)/2;
+    if (medtmp == other) {
+        return medtmp; // Preserve exactness, respect infinities of the same sign.
+    } else {
+        return medtmp + (other - medtmp) / 2; // Avoid FP overflow.
+    }
 }
 
 /**
@@ -208,8 +211,11 @@ Output_ direct(Value_* value, Index_ num_nonzero, Index_ num_all, bool skip_nan)
         other = *(std::max_element(value, value + skip_zeros)); // max_element gets the sorted value at skip_zeros - 1, see explanation for the dense case.
     }
 
-    // Avoid FP overflow, preserve exactness of the median if baseline == other.
-    return baseline + (other - baseline) / 2;
+    if (baseline == other) {
+        return baseline; // Preserve exactness, respect infinities of the same sign.
+    } else {
+        return baseline + (other - baseline) / 2; // Avoid FP overflow.
+    }
 }
 
 /**
