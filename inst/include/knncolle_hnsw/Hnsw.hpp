@@ -296,7 +296,7 @@ public:
 
         // Dear God, make saveIndex() const.
         auto index_ptr = const_cast<hnswlib::HierarchicalNSW<HnswData_>*>(&my_index);
-        index_ptr->saveIndex(dir / "INDEX");
+        index_ptr->saveIndex((dir / "INDEX").string());
     }
 
     HnswPrebuilt(const std::filesystem::path& dir) : 
@@ -339,7 +339,7 @@ public:
             return norm;
         }()),
 
-        my_index(my_space.get(), dir / "INDEX")
+        my_index(my_space.get(), (dir / "INDEX").string())
 
     {
         if (my_normalize_method == DistanceNormalizeMethod::CUSTOM) {
