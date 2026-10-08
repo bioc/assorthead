@@ -6,6 +6,7 @@
 #include <complex>
 #include <type_traits>
 #include <stdexcept>
+#include <exception>
 #include <memory>
 #include <thread>
 #include <mutex>
