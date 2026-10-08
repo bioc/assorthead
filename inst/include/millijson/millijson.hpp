@@ -322,7 +322,6 @@ bool is_expected_string(Input_& input, const char* ptr, std::size_t len) {
 
 template<class Input_>
 std::string extract_string(Input_& input) {
-    unsigned long long start = input.position() + 1;
     input.advance(); // get past the opening quote.
     std::string output;
 
@@ -335,7 +334,7 @@ std::string extract_string(Input_& input) {
 
             case '\\':
                 if (!input.advance()) {
-                    throw std::runtime_error("unterminated string at position " + std::to_string(start));
+                    throw std::runtime_error("unterminated string at position " + std::to_string(input.position() + 1));
                 } else {
                     char next2 = input.get();
                     switch (next2) {
@@ -368,7 +367,7 @@ std::string extract_string(Input_& input) {
                                 unsigned short mb = 0;
                                 for (int i = 0; i < 4; ++i) {
                                     if (!input.advance()){
-                                        throw std::runtime_error("unterminated string at position " + std::to_string(start));
+                                        throw std::runtime_error("unterminated string at position " + std::to_string(input.position() + 1));
                                     }
                                     mb *= 16;
                                     char val = input.get();
@@ -425,7 +424,7 @@ std::string extract_string(Input_& input) {
         }
 
         if (!input.advance()) {
-            throw std::runtime_error("unterminated string at position " + std::to_string(start));
+            throw std::runtime_error("unterminated string at position " + std::to_string(input.position() + 1));
         }
     }
 
@@ -434,7 +433,6 @@ std::string extract_string(Input_& input) {
 
 template<bool as_string_, class Input_>
 typename std::conditional<as_string_, std::string, double>::type extract_number(Input_& input) {
-    unsigned long long start = input.position() + 1;
     auto value = []{
         if constexpr(as_string_) {
             return std::string("");
@@ -472,7 +470,7 @@ typename std::conditional<as_string_, std::string, double>::type extract_number(
             case ',': case ']': case '}': case ' ': case '\r': case '\n': case '\t':
                 return value;
             default:
-                throw std::runtime_error("invalid number starting with 0 at position " + std::to_string(start));
+                throw std::runtime_error("invalid number starting with 0 at position " + std::to_string(input.position() + 1));
         }
 
     } else { // 'lead' must be a digit, as extract_number is only called when the current character is a digit.
@@ -502,7 +500,7 @@ typename std::conditional<as_string_, std::string, double>::type extract_number(
                     }
                     break;
                 default:
-                    throw std::runtime_error("invalid number containing '" + std::string(1, val) + "' at position " + std::to_string(start));
+                    throw std::runtime_error("invalid number containing '" + std::string(1, val) + "' at position " + std::to_string(input.position() + 1));
             }
         }
 
@@ -511,12 +509,12 @@ integral_end:;
 
     if (in_fraction) {
         if (!input.advance()) {
-            throw std::runtime_error("invalid number with trailing '.' at position " + std::to_string(start));
+            throw std::runtime_error("invalid number with trailing '.' at position " + std::to_string(input.position() + 1));
         }
 
         char val = input.get();
         if (!is_digit(val)) {
-            throw std::runtime_error("'.' must be followed by at least one digit at position " + std::to_string(start));
+            throw std::runtime_error("'.' must be followed by at least one digit at position " + std::to_string(input.position() + 1));
         }
 
         double fractional = 10;
@@ -544,7 +542,7 @@ integral_end:;
                     }
                     break;
                 default:
-                    throw std::runtime_error("invalid number containing '" + std::string(1, val) + "' at position " + std::to_string(start));
+                    throw std::runtime_error("invalid number containing '" + std::string(1, val) + "' at position " + std::to_string(input.position() + 1));
             }
         } 
 
@@ -556,7 +554,7 @@ fraction_end:;
         bool negative_exponent = false;
 
         if (!input.advance()) {
-            throw std::runtime_error("invalid number with trailing 'e/E' at position " + std::to_string(start));
+            throw std::runtime_error("invalid number with trailing 'e/E' at position " + std::to_string(input.position() + 1));
         }
 
         char val = input.get();
@@ -565,15 +563,15 @@ fraction_end:;
                 negative_exponent = true;
                 add_string_value(val);
             } else if (val != '+') {
-                throw std::runtime_error("'e/E' should be followed by a sign or digit in number at position " + std::to_string(start));
+                throw std::runtime_error("'e/E' should be followed by a sign or digit in number at position " + std::to_string(input.position() + 1));
             }
 
             if (!input.advance()) {
-                throw std::runtime_error("invalid number with trailing exponent sign at position " + std::to_string(start));
+                throw std::runtime_error("invalid number with trailing exponent sign at position " + std::to_string(input.position() + 1));
             }
             val = input.get();
             if (!is_digit(val)) {
-                throw std::runtime_error("exponent sign must be followed by at least one digit in number at position " + std::to_string(start));
+                throw std::runtime_error("exponent sign must be followed by at least one digit in number at position " + std::to_string(input.position() + 1));
             }
         }
 
@@ -597,7 +595,7 @@ fraction_end:;
                     }
                     break;
                 default:
-                    throw std::runtime_error("invalid number containing '" + std::string(1, val) + "' at position " + std::to_string(start));
+                    throw std::runtime_error("invalid number containing '" + std::string(1, val) + "' at position " + std::to_string(input.position() + 1));
             }
         }
 
@@ -702,7 +700,6 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
     };
     std::vector<ObjectContents> object_stack;
 
-    unsigned long long start = input.position() + 1;
     auto extract_object_key = [&]() -> std::string {
         char next = input.get();
         if (next != '"') {
@@ -710,13 +707,13 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
         }
         auto key = extract_string(input);
         if (!check_and_chomp(input)) {
-            throw std::runtime_error("unterminated object starting at position " + std::to_string(start));
+            throw std::runtime_error("unterminated object at position " + std::to_string(input.position() + 1));
         }
         if (input.get() != ':') {
             throw std::runtime_error("expected ':' to separate keys and values at position " + std::to_string(input.position() + 1));
         }
         if (!advance_and_chomp(input)) {
-            throw std::runtime_error("unterminated object starting at position " + std::to_string(start));
+            throw std::runtime_error("unterminated object at position " + std::to_string(input.position() + 1));
         }
         return key;
     };
@@ -727,21 +724,21 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
         switch(current) {
             case 't':
                 if (!is_expected_string(input, "true", 4)) {
-                    throw std::runtime_error("expected a 'true' string at position " + std::to_string(start));
+                    throw std::runtime_error("expected a 'true' string at position " + std::to_string(input.position() + 1));
                 }
                 output.reset(Provisioner_::new_boolean(true));
                 break;
 
             case 'f':
                 if (!is_expected_string(input, "false", 5)) {
-                    throw std::runtime_error("expected a 'false' string at position " + std::to_string(start));
+                    throw std::runtime_error("expected a 'false' string at position " + std::to_string(input.position() + 1));
                 }
                 output.reset(Provisioner_::new_boolean(false));
                 break;
 
             case 'n':
                 if (!is_expected_string(input, "null", 4)) {
-                    throw std::runtime_error("expected a 'null' string at position " + std::to_string(start));
+                    throw std::runtime_error("expected a 'null' string at position " + std::to_string(input.position() + 1));
                 }
                 output.reset(Provisioner_::new_nothing());
                 break;
@@ -752,7 +749,7 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
 
             case '[':
                 if (!advance_and_chomp(input)) {
-                    throw std::runtime_error("unterminated array starting at position " + std::to_string(start));
+                    throw std::runtime_error("unterminated array at position " + std::to_string(input.position() + 1));
                 }
                 if (input.get() != ']') {
                     stack.push_back(ARRAY);
@@ -765,7 +762,7 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
 
             case '{':
                 if (!advance_and_chomp(input)) {
-                    throw std::runtime_error("unterminated object starting at position " + std::to_string(start));
+                    throw std::runtime_error("unterminated object at position " + std::to_string(input.position() + 1));
                 }
                 if (input.get() != '}') {
                     stack.push_back(OBJECT);
@@ -778,10 +775,10 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
 
             case '-':
                 if (!input.advance()) {
-                    throw std::runtime_error("incomplete number starting at position " + std::to_string(start));
+                    throw std::runtime_error("incomplete number at position " + std::to_string(input.position() + 1));
                 }
                 if (!is_digit(input.get())) {
-                    throw std::runtime_error("invalid number starting at position " + std::to_string(start));
+                    throw std::runtime_error("invalid number at position " + std::to_string(input.position() + 1));
                 }
                 if (options.number_as_string) {
                     output.reset(Provisioner_::new_number_as_string("-" + extract_number<true>(input)));
@@ -799,7 +796,7 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
                 break;
 
             default:
-                throw std::runtime_error(std::string("unknown type starting with '") + std::string(1, current) + "' at position " + std::to_string(start));
+                throw std::runtime_error(std::string("unknown type starting with '") + std::string(1, current) + "' at position " + std::to_string(input.position() + 1));
         }
 
         while (1) {
@@ -812,13 +809,13 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
                 contents.emplace_back(std::move(output));
 
                 if (!check_and_chomp(input)) {
-                    throw std::runtime_error("unterminated array starting at position " + std::to_string(start));
+                    throw std::runtime_error("unterminated array at position " + std::to_string(input.position() + 1));
                 }
 
                 char next = input.get();
                 if (next == ',') {
                     if (!advance_and_chomp(input)) {
-                        throw std::runtime_error("unterminated array starting at position " + std::to_string(start));
+                        throw std::runtime_error("unterminated array at position " + std::to_string(input.position() + 1));
                     }
                     break; // prepare to parse the next entry of the array.
                 }
@@ -840,13 +837,13 @@ std::shared_ptr<typename Provisioner_::Base> parse_internal(Input_& input, const
                 mapping[std::move(key)] = std::move(output); // consuming the key here.
 
                 if (!check_and_chomp(input)) {
-                    throw std::runtime_error("unterminated object starting at position " + std::to_string(start));
+                    throw std::runtime_error("unterminated object at position " + std::to_string(input.position() + 1));
                 }
 
                 char next = input.get();
                 if (next == ',') {
                     if (!advance_and_chomp(input)) {
-                        throw std::runtime_error("unterminated object starting at position " + std::to_string(start));
+                        throw std::runtime_error("unterminated object at position " + std::to_string(input.position() + 1));
                     }
                     key = extract_object_key();
                     break; // prepare to parse the next value of the object.

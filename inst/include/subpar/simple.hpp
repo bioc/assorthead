@@ -6,6 +6,7 @@
 #ifndef SUBPAR_CUSTOM_PARALLELIZE_SIMPLE
 #include <vector>
 #include <stdexcept>
+#include <exception>
 #include <thread>
 #include <type_traits>
 #endif

@@ -11,6 +11,7 @@
 #include <mutex>
 #include <vector>
 #include <algorithm>
+#include <stdexcept>
 #include <exception>
 #include <type_traits>
 #include <memory>
@@ -382,19 +383,21 @@ public:
         my_buffer_worker(buffer_size)
     {
         my_thread = std::thread([&]() { thread_loop(); }); // set up thread before initializing.
-        this->initialize();
+
+        try {
+            this->initialize();
+        } catch (std::exception& e) {
+            // Killing thread as destructor won't be called if the constructor didn't finish.
+            kill_thread();
+            throw;
+        }
     }
 
     /**
      * @cond
      */
     ~ParallelBufferedReader() {
-        std::unique_lock lck(my_mut);
-        my_kill = true;
-        my_ready_input = true;
-        lck.unlock(); // releasing the lock so that the notified thread doesn't immediately block.
-        my_cv.notify_one();
-        my_thread.join();
+        kill_thread();
     }
     /**
      * @endcond
@@ -436,6 +439,15 @@ private:
             lck.unlock();
             my_cv.notify_one();
         }
+    }
+
+    void kill_thread() {
+        std::unique_lock lck(my_mut);
+        my_kill = true;
+        my_ready_input = true;
+        lck.unlock(); // releasing the lock so that the notified thread doesn't immediately block.
+        my_cv.notify_one();
+        my_thread.join();
     }
 
 protected:
@@ -482,7 +494,7 @@ protected:
 
     std::size_t refill(Type_* ptr) {
         if (my_worker_active) {
-            // If the worker is active, we wait for it to finish, transfer the results to the supplied pointer.
+            // If the worker is active, we wait for it to finish and then transfer the results to the supplied pointer.
             // We do not submit a new job, based on the loop in BufferedReader::extract():
             // 
             // - We'll probably want to call this refill() overload again.

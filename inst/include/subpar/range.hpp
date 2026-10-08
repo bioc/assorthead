@@ -7,6 +7,7 @@
 #ifndef SUBPAR_CUSTOM_PARALLELIZE_RANGE
 #include <vector>
 #include <stdexcept>
+#include <exception>
 #include <thread>
 #endif
 
